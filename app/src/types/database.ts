@@ -91,6 +91,18 @@ export type TransactionFields = {
 };
 export type PurchaseTransaction = Timestamps &
   TransactionFields & { id: string; store_id: string };
+export type DashboardSummary = {
+  aggregation_date: string;
+  today_visits: number;
+  today_completed: number;
+  today_not_completed: number;
+  today_purchase_total: number;
+  today_unpriced: number;
+  month_visits: number;
+  month_completed: number;
+  month_purchase_total: number;
+  month_unpriced: number;
+};
 export type ItemFields = {
   product_category_id: string | null;
   item_name: string;
@@ -194,6 +206,10 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      get_dashboard_summary: {
+        Args: { p_as_of?: string };
+        Returns: DashboardSummary[];
+      };
       find_customer_candidates: {
         Args: { p_store_id: string; p_customer: Json };
         Returns: Customer[];

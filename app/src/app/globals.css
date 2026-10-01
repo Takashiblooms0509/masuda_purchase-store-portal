@@ -78,4 +78,18 @@ textarea:focus-visible { outline:3px solid #5cb7a6; outline-offset:3px; }
 .lookup-panel label { min-width:250px; }
 .wide { grid-column:1/-1; }
 .section-detail { margin-top:24px; }
+.metric-section { margin:28px 0; }
+.metric-section h2 { margin-bottom:12px; }
+.metric-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; }
+.month-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.metric-card { margin-top:0; padding:20px; }
+.metric-card h3 { color:var(--muted); font-size:13px; font-weight:600; margin:0 0 12px; }
+.metric-value { font-size:28px; line-height:1.4; font-weight:700; margin:0; overflow-wrap:anywhere; }
+.metric-card .small { margin:10px 0 0; }
+.badge.failed { background:#fff1ee; color:#9a302b; }
+.import-error-message { min-width:230px; white-space:pre-wrap; overflow-wrap:anywhere; }
+.file-name { max-width:250px; overflow-wrap:anywhere; }
+.retry-unavailable:disabled { cursor:not-allowed; }
+@media(max-width:1100px) { .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:620px) { .metric-grid { grid-template-columns:1fr; } }
 @media(max-width:620px) { .page-heading { flex-direction:column; } .lookup-panel label { min-width:0; width:100%; } }

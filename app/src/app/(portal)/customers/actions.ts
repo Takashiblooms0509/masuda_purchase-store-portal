@@ -91,6 +91,7 @@ export async function saveCustomer(
     return { message: "保存できません。時間をおいて再度お試しください。" };
   }
   revalidatePath("/customers");
+  revalidatePath("/");
   revalidatePath(`/customers/${customerId}`);
   if (!id) redirect(`/customers/${customerId}`);
   return { message: "顧客情報を保存しました。", success: true };

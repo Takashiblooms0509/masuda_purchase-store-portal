@@ -117,6 +117,7 @@ export async function saveTransaction(
     };
   }
   revalidatePath("/purchases");
+  revalidatePath("/");
   revalidatePath("/customers");
   revalidatePath("/customers", "layout");
   revalidatePath(`/purchases/${transactionId}`);

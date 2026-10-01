@@ -1,20 +1,26 @@
 import { businessSession } from "@/lib/business/access";
+import Link from "next/link";
+import { z } from "zod";
 import { PageTitle, Empty, Pagination } from "@/components/business-ui";
 import { ImportForm } from "./form";
 import { datetime, importTypes, processingLabels } from "@/lib/business/format";
 export default async function ImportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; document?: string }>;
 }) {
   const { supabase, stores } = await businessSession();
+  const params = await searchParams;
+  const documentId = z.uuid().safeParse(params.document).success
+    ? params.document!
+    : "";
   const page = Math.max(
     1,
-    Math.min(10000, Math.trunc(Number((await searchParams).page) || 1)),
+    Math.min(10000, Math.trunc(Number(params.page) || 1)),
   );
-  const { data, error, count } = await supabase
-    .from("document_imports")
-    .select("*", { count: "exact" })
+  let query = supabase.from("document_imports").select("*", { count: "exact" });
+  if (documentId) query = query.eq("id", documentId);
+  const { data, error, count } = await query
     .order("created_at", { ascending: false })
     .order("id")
     .range((page - 1) * 30, page * 30 - 1);
@@ -34,6 +40,14 @@ export default async function ImportsPage({
       </section>
       <section className="card">
         <h2>原本一覧</h2>
+        {documentId && (
+          <p className="muted">
+            選択した原本を表示しています。
+            <Link className="text-link" href="/imports">
+              すべての原本を表示
+            </Link>
+          </p>
+        )}
         {!data?.length ? (
           <Empty>原本情報はありません。</Empty>
         ) : (
@@ -78,7 +92,9 @@ export default async function ImportsPage({
         <Pagination
           page={page}
           count={count ?? 0}
-          href={(p) => `/imports?page=${p}`}
+          href={(p) =>
+            `/imports?${new URLSearchParams({ page: String(p), document: documentId })}`
+          }
         />
       </section>
     </>
