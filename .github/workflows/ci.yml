@@ -1,4 +1,4 @@
-name: Phase1 checks
+name: Portal checks
 on:
   pull_request:
   push:

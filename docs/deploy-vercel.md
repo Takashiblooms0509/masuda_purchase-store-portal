@@ -1,6 +1,8 @@
 # Vercelデプロイ手順
 
-今回の作業はPhase1のコード・設定手順まで。本番公開やSupabase設定が完了したことを意味しない。
+Phase1の公開と本番admin/staffログイン・権限制御はユーザー確認済み。
+本番URL：[買取店管理ポータル](https://masuda-purchase-store-portal.vercel.app)。
+以下は初回設定の手順。Phase2の反映ではプロジェクトを作り直さず、[追加migration手順](phase2-setup.md)を先に実施する。
 Supabase初期設定を先に完了する： [setup-supabase.md](setup-supabase.md)。
 
 【ユーザー作業】
@@ -15,7 +17,7 @@ Supabase初期設定を先に完了する： [setup-supabase.md](setup-supabase.
 | NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY | sb_publishable_aAO1v5w06tupuCjXlRt5xA_ERj2bcNB |
 
 環境変数変更後はRedeployが必要。秘密情報はソースに書かない。
-Phase1ではOpenAI API Key、Supabase Secret/Service Role Key、DBパスワードの設定は不要。
+Phase1・Phase2ではOpenAI API Key、Supabase Secret/Service Role Key、DBパスワードの設定は不要。
 後続PhaseでOPENAI_API_KEY / OPENAI_MODELをサーバー専用変数として設定する。
 
 ## GitHubの反映

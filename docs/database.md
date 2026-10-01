@@ -1,7 +1,7 @@
 # DB設計
 
 Phase1の実DDLは `supabase/migrations/202610010001_phase1_auth_stores.sql`。
-以下の業務テーブルはPhase2の実装案。将来の卸・販売テーブルは定義しない。
+Phase2の実DDLは `supabase/migrations/202610010002_phase2_business.sql`。将来の卸・販売テーブルは定義しない。
 全idはUUID。日時はtimestamptz、日付はdate、金額はnumeric(14,2)、数量/重量を数値化する場合はnumeric。
 created_at / updated_atはnot null・now()、updated_atはDBトリガー更新。
 指定のない業務値はnullを許可し、未読取・未確定を空文字や0と混同しない。
@@ -49,7 +49,7 @@ Authユーザー作成時はinactiveのstaff・所属なし。role/name/storeは
 store_idに索引。有効店舗かどうかはアクセス時に照会する。
 メール変更はAuth側で行いトリガー同期。nameはポータル管理者が設定。
 
-## Phase2案：customers
+## Phase2：customers
 | カラム | 型・制約 |
 |---|---|
 | id | uuid PK |
@@ -65,29 +65,31 @@ store_idに索引。有効店舗かどうかはアクセス時に照会する。
 
 UNIQUE(id, store_id)で同一店舗FKの参照先を用意。
 カード番号の全体一意制約や自動統合は設けない（記載・採番ルール未確定）。
-store_idとカード/電話/氏名/生年月日検索の索引を追加し、比較用正規化を後続実装する。
+store_idとカード/電話/氏名/生年月日検索の索引を追加。find_customer_candidatesで電話の全角数字・記号と氏名の空白を正規化し、候補を表示する。自動統合しない。
 
-## Phase2案：customer_documents
+## Phase2：customer_documents
 | カラム | 型・制約 |
 |---|---|
 | id | uuid PK |
 | customer_id | uuid NOT NULL FK → customers.id |
 | document_type | text NOT NULL。drivers_license / my_number_card / passport / otherを初期許容 |
 | file_name | text NOT NULL |
-| file_url | text NOT NULL、非公開Storageのオブジェクトパス（恒久公開URLにしない） |
+| file_url | text nullable、Phase4で非公開Storageのオブジェクトパスを設定（恒久公開URLにしない） |
 | drive_file_id | text nullable、将来用 |
-| uploaded_at, created_at | timestamptz NOT NULL |
+| uploaded_at | timestamptz nullable、画像アップロードが完了したときに設定 |
+| created_at | timestamptz NOT NULL、書類情報登録日時 |
 
 顧客1人に複数画像。RLSはcustomersを参照し店舗所属を確認。
 本人確認書類の保管対象・保存期限を運用で確認し、不要な情報を収集しない。
 
-## Phase2案：document_imports
+## Phase2：document_imports
 | カラム | 型・制約 |
 |---|---|
 | id | uuid PK |
 | store_id | uuid NOT NULL FK → stores.id |
 | document_type | text NOT NULL、purchase_document / customer_identification / membership_card / other |
-| file_name, file_url | text NOT NULL、file_urlは非公開オブジェクトパス |
+| file_name | text NOT NULL |
+| file_url | text nullable、画像未登録ではnull。Phase4で非公開オブジェクトパスを設定 |
 | drive_file_id | text nullable |
 | processing_status | text NOT NULL default pending、pending / processing / review_required / completed / failed |
 | error_message | text nullable、個人情報/外部API生エラーを保存しない |
@@ -101,7 +103,7 @@ store_idとカード/電話/氏名/生年月日検索の索引を追加し、比
 UNIQUE(id, store_id)。AI結果は人の確認前でも取込テーブルに保存できるが、顧客/取引/明細には登録しない。
 処理ロック・重複確定・再試行競合をPhase4–5で実装する。
 
-## Phase2案：purchase_transactions
+## Phase2：purchase_transactions
 | カラム | 型・制約 |
 |---|---|
 | id | uuid PK |
@@ -120,11 +122,11 @@ UNIQUE(id, store_id)。AI結果は人の確認前でも取込テーブルに保�
 
 計算書1枚=1取引・1来店。取込原本1枚からの重複確定をUNIQUEで防ぐ。
 statusはPostgreSQL enumに固定せずtext+CHECKで追加migrationにより拡張可能。
-store_id・visit_datetime・customer_id・statusの索引。日次来店/成約はこのテーブルから算出。
-買取金額集計の対象はcompleted、点数/合計と明細の不一致は確認画面で警告する後続案。
+store_idとvisit_datetimeの複合索引、customer_idの索引。日次来店/成約はこのテーブルから算出。
+買取金額集計はPhase3で追加する。明細金額とヘッダー合計の不一致は現在の編集画面で警告する。点数は明細行数・数量から自動決定しない。
 顧客と原本の他店舗紐付けを複合FKでDBレベルでも禁止する。
 
-## Phase2案：purchase_items
+## Phase2：purchase_items
 | カラム | 型・制約 |
 |---|---|
 | id | uuid PK、将来の卸/販売連携用の安定キー |
@@ -133,6 +135,7 @@ store_id・visit_datetime・customer_id・statusの索引。日次来店/成約�
 | raw_item_name | text nullable、AI原読取値 |
 | item_name | text NOT NULL、ユーザー確定値 |
 | denomination_or_weight | text nullable、グラム/額面の原記載を保持 |
+| display_order | integer NOT NULL default 0、帳票の明細行順を維持 |
 | quantity | numeric(12,3) nullable、CHECK >= 0 |
 | purchase_amount | numeric(14,2) nullable、CHECK >= 0 |
 | category_confidence | numeric(5,4) nullable、CHECK 0〜1 |
@@ -141,10 +144,10 @@ store_id・visit_datetime・customer_id・statusの索引。日次来店/成約�
 | created_at, updated_at | timestamptz NOT NULL |
 
 明細1行=1レコード。RLSは取引のstore_idを参照する。
-親変更時もWITH CHECKで新しい取引の店舗を検証する。
+明細の親取引は登録後に変更できない。RLSは親取引から店舗権限を検証する。
 AIのカテゴリ候補・確定カテゴリの表示をPhase5で実装し、信頼度だけで自動確定しない。
 
-## Phase2案：product_categories
+## Phase2：product_categories
 | カラム | 型・制約 |
 |---|---|
 | id | uuid PK |
@@ -164,4 +167,13 @@ AIのカテゴリ候補・確定カテゴリの表示をPhase5で実装し、信
 INSERT/UPDATEはWITH CHECKで他店舗への差替えを禁止。共通カテゴリの更新はadminだけ。
 非公開Storageでは `<store UUID>/<import or customer UUID>/<random file name>` のパスを用い、
 stores/profilesの有効状態をRLSで照会する。画面の画像参照は短時間署名URL。
-トランザクション確定はログインユーザー権限のDB関数で実装する予定で、Service RoleによるRLS回避を常用しない。
+取引・明細保存はログインユーザー権限のsave_purchase_transaction関数で原子的に実行する。Service Roleは使用しない。
+
+## Phase2の権限と未実装境界
+顧客・取引・原本・カテゴリ・書類情報は登録/閲覧/編集を実装。顧客や取引の物理削除と店舗変更は許可しない。
+明細は取引編集で追加・修正・除去できる。残す明細のUUIDとAI原読取値・信頼度は保持し、行順のみ更新する。
+カテゴリはadminが管理しstaffは参照。階層はトリガー計算、親変更の循環禁止と子孫level更新をDBで保証する。
+file_url・uploaded_at・AI処理状態・retry_countなどはユーザーが手動書換えできない列として予約する。
+Phase2ではファイル名/種別の管理まで。実画像、AI結果、再処理、エラーメニュー、ダッシュボード集計は後続Phase。
+ai_result / reviewed_result / ai_schema_versionの3列はPhase4案であり今回のDDLには含めない。
+初回/最終来店日は成約・不成約を含む取引日から日本時間で再計算する。営業日の締め時刻はPhase3で確認する。
