@@ -4,7 +4,7 @@
 紙・Excel・Driveに分散した顧客、買取、来店、商品明細、原本、AI読取結果を一元管理する。
 Next.js App Router / TypeScript / Supabase PostgreSQL・Auth・Storage / Vercel。
 OpenAI APIはPhase4でサーバー側のみ使用。アプリのルートは `app/`。
-Phase1の認証・stores / profiles基盤に加え、Phase2の業務6テーブルと登録・閲覧・編集を実装。
+Phase1の認証基盤、Phase2の業務6テーブルと登録・閲覧・編集、Phase3の基本集計とエラー一覧を実装。
 
 ## DB設計・複数店舗
 店舗データの根にstore_idを持たせ、子データはFKとRLSで店舗境界を維持する。
@@ -25,7 +25,7 @@ profilesの自己昇格は禁止。RLSを必須にし、画面のチェックだ
 未認証の業務データアクセスを禁止。非公開画像は後続PhaseでStorage RLS・短時間署名URLを実装。
 .env.local / 秘密情報 / DBパスワード / OpenAI API Keyをコミットしない。
 Supabase Publishable Keyは公開用キーだが、それだけで業務データを公開しない。
-Service Role/Secret KeyをNEXT_PUBLIC変数に入れない。Phase1・Phase2アプリには不要。
+Service Role/Secret KeyをNEXT_PUBLIC変数に入れない。Phase1〜Phase3アプリには不要。
 個人情報、パスワード、トークン、DB/APIの生エラーをconsoleやエラーログに出さない。
 本人確認番号は将来専用のアクセス層・暗号化へ移せるよう扱う。
 本番データへの破壊的操作を避け、migrationをレビュー可能なファイルにする。
@@ -50,3 +50,8 @@ RLS変更時は `app/tests/rls.test.ts` と `app/tests/business-rls.test.ts` を
 顧客の初回・最終来店日は日本時間の取引履歴からDBトリガーで更新し、直接編集しない。
 実Supabaseでの適用・動作確認が未実施ならその事実を明示する。
 `app/AGENTS.md` のNext.jsバージョン固有ガイドも読む。
+
+Phase3集計はget_dashboard_summary（SECURITY INVOKER）で既存取引を日本時間の暦日/月から算出する。
+RESTの行数上限に依存するクライアント集計をしない。成約金額未入力は件数を表示し、0円と区別する。
+集計・エラー一覧もRLSを通し、Service Roleを使わない。集計/RLS変更時はreporting-rls.test.tsも確認する。
+Phase3のエラー再処理は未実装。無効化ボタンを動作可能に見せない。

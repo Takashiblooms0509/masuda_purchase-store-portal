@@ -44,6 +44,7 @@ export async function saveImport(
     return { message: "原本情報を保存できません。" };
   }
   revalidatePath("/imports");
+  revalidatePath("/errors");
   revalidatePath("/purchases", "layout");
   return {
     message:

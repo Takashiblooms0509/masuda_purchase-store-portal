@@ -1,7 +1,8 @@
 # DB設計
 
 Phase1の実DDLは `supabase/migrations/202610010001_phase1_auth_stores.sql`。
-Phase2の実DDLは `supabase/migrations/202610010002_phase2_business.sql`。将来の卸・販売テーブルは定義しない。
+Phase2の実DDLは `supabase/migrations/202610010002_phase2_business.sql`。
+Phase3の集計関数は `supabase/migrations/202610010003_phase3_reporting.sql`。将来の卸・販売テーブルは定義しない。
 全idはUUID。日時はtimestamptz、日付はdate、金額はnumeric(14,2)、数量/重量を数値化する場合はnumeric。
 created_at / updated_atはnot null・now()、updated_atはDBトリガー更新。
 指定のない業務値はnullを許可し、未読取・未確定を空文字や0と混同しない。
@@ -123,7 +124,7 @@ UNIQUE(id, store_id)。AI結果は人の確認前でも取込テーブルに保�
 計算書1枚=1取引・1来店。取込原本1枚からの重複確定をUNIQUEで防ぐ。
 statusはPostgreSQL enumに固定せずtext+CHECKで追加migrationにより拡張可能。
 store_idとvisit_datetimeの複合索引、customer_idの索引。日次来店/成約はこのテーブルから算出。
-買取金額集計はPhase3で追加する。明細金額とヘッダー合計の不一致は現在の編集画面で警告する。点数は明細行数・数量から自動決定しない。
+買取金額集計はPhase3で実装。明細金額とヘッダー合計の不一致は現在の編集画面で警告する。点数は明細行数・数量から自動決定しない。
 顧客と原本の他店舗紐付けを複合FKでDBレベルでも禁止する。
 
 ## Phase2：purchase_items
@@ -176,4 +177,22 @@ stores/profilesの有効状態をRLSで照会する。画面の画像参照は�
 file_url・uploaded_at・AI処理状態・retry_countなどはユーザーが手動書換えできない列として予約する。
 Phase2ではファイル名/種別の管理まで。実画像、AI結果、再処理、エラーメニュー、ダッシュボード集計は後続Phase。
 ai_result / reviewed_result / ai_schema_versionの3列はPhase4案であり今回のDDLには含めない。
-初回/最終来店日は成約・不成約を含む取引日から日本時間で再計算する。営業日の締め時刻はPhase3で確認する。
+初回/最終来店日は成約・不成約を含む取引日から日本時間で再計算する。集計の「本日」も日本時間の暦日とする。独自の営業日締め時刻は未定義。
+
+
+## Phase3：集計関数とエラー一覧
+
+追加のテーブル・PK/FK・RLS変更はない。get_dashboard_summary(p_as_of timestamptz default now())は
+SQL STABLE / SECURITY INVOKERで、呼出者のpurchase_transactionsのRLSを維持する。
+匿名には実行を許可せず、authenticatedだけに実行権限を付与する。
+p_as_ofは日付境界検証用の基準時刻。通常の画面は引数を渡さずDBの現在時刻を使う。
+
+返す値：aggregation_date（日本時間の日付）、today_visits / today_completed / today_not_completed、
+today_purchase_total / today_unpriced、month_visits / month_completed / month_purchase_total / month_unpriced。
+各件数はbigint、金額合計はnumeric。成約だけを金額対象とし、未入力金額は合計から除き件数を別に返す。
+日次集計表を作らず、DB内の集計でRESTの取得行数上限による欠落を防ぐ。
+
+エラー一覧はdocument_imports.processing_status=failedを店舗RLS下で取得する。
+原本IDの直接リンクもRLSを通し、staffが他店舗IDを指定しても表示できない。
+取引/顧客保存後はダッシュボードを、原本情報の編集後はエラー一覧を再検証する。
+AIのエラー作成・再処理・処理状態変更はPhase4以降。

@@ -76,3 +76,40 @@ Codexが実Supabaseへ直接接続して全件検証した結果ではなく、�
 
 次は [phase2-setup.md](phase2-setup.md) に沿い、追加SQLを適用してからコードをmainへ反映する。
 画像・AI処理、ダッシュボード集計、エラー一覧はPhase3以降の対象。
+
+
+## Phase2：公開後のユーザー確認
+
+ユーザーからPhase2 migration成功（Success. No rows returned）、PR #2マージ・デプロイ完了、
+「顧客登録・編集OK／取引・明細保存OK／staff確認OK」の報告を受領。
+CodexはPR #2のmerged状態と、本番/loginの200、未認証の/customers・/purchases・/categories・/importsが
+/loginへ移動することを確認した。ログイン後の業務操作はユーザーの確認結果。
+
+## Phase3：開発環境での検証
+
+2026-10-01、同じNode.js / Next.js構成で実施。
+
+| 検証 | 結果 |
+|---|---|
+| `npm run typecheck` | 成功 |
+| `npm run lint` | 成功 |
+| `npm test` | 5ファイル、70テスト成功 |
+| `npm run build` | 本番build成功、/errorsを含む15ルート |
+| Chromiumのログイン後操作 | 成功（ローカルAuth/REST代替環境） |
+| `git diff --check` | 成功 |
+
+Phase1〜Phase3の実SQLをPGliteで実行。日本時間の00:00/月初/月末/年越し/うるう日、
+DBセッションのtimezone差、1,000件超の集計、成約のみの金額・未入力と0円の区別、
+空期間、admin/staff/匿名/JWTなし/inactive/無効店舗のRLSを検証した。
+既存Phase1/Phase2テストも全件成功。
+
+Chromiumでは架空取引・原本を使い、7集計値、最近5件、未入力金額の注意表示、
+取引金額編集後のダッシュボード更新、admin/staffの集計範囲を確認した。
+エラー一覧はfailedのみの表示、店舗絞り込み、30件ごとのページ送り、該当原本へのリンク、
+他店舗IDを指定したstaffの拒否、再処理の無効化を確認。幅620pxの表示も確認した。
+ローカル代替APIを使った検証であり、実Supabaseや本番データを変更していない。
+
+### Phase3の未実施
+
+実Supabaseへの集計関数SQL適用、Vercel反映後の実アカウントによる集計・エラー一覧の確認。
+[phase3-setup.md](phase3-setup.md)にユーザー作業を記載。
