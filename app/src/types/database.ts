@@ -41,6 +41,11 @@ export type Customer = Timestamps &
     last_visit_date: string | null;
   };
 export type CustomerDocument = {
+  upload_path: string | null;
+  content_type: "image/jpeg" | "image/png" | null;
+  expected_file_size: number | null;
+  file_size: number | null;
+
   id: string;
   customer_id: string;
   document_type: "drivers_license" | "my_number_card" | "passport" | "other";
@@ -59,6 +64,17 @@ export type ProductCategory = Timestamps & {
   is_active: boolean;
 };
 export type DocumentImport = Timestamps & {
+  upload_path: string | null;
+  content_type: "image/jpeg" | "image/png" | null;
+  expected_file_size: number | null;
+  file_size: number | null;
+  processing_started_at: string | null;
+  processing_token: string | null;
+  ai_result: Json | null;
+  reviewed_result: Json | null;
+  ai_schema_version: string | null;
+  ai_model: string | null;
+
   id: string;
   store_id: string;
   document_type:
@@ -206,6 +222,41 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      prepare_document_upload: {
+        Args: {
+          p_actor: string;
+          p_kind: string;
+          p_id: string;
+          p_mime: string;
+          p_size: number;
+        };
+        Returns: string;
+      };
+      complete_document_upload: {
+        Args: { p_actor: string; p_kind: string; p_id: string };
+        Returns: undefined;
+      };
+      claim_import_processing: {
+        Args: { p_actor: string; p_id: string };
+        Returns: string;
+      };
+      finish_import_processing: {
+        Args: {
+          p_actor: string;
+          p_id: string;
+          p_token: string;
+          p_result: Json;
+          p_review: Json;
+          p_model: string | null;
+          p_error_code: string | null;
+        };
+        Returns: boolean;
+      };
+      save_import_review: {
+        Args: { p_id: string; p_review: Json; p_expected_updated_at: string };
+        Returns: undefined;
+      };
+
       get_dashboard_summary: {
         Args: { p_as_of?: string };
         Returns: DashboardSummary[];

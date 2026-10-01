@@ -3,8 +3,8 @@
 ## 目的と技術構成
 紙・Excel・Driveに分散した顧客、買取、来店、商品明細、原本、AI読取結果を一元管理する。
 Next.js App Router / TypeScript / Supabase PostgreSQL・Auth・Storage / Vercel。
-OpenAI APIはPhase4でサーバー側のみ使用。アプリのルートは `app/`。
-Phase1の認証基盤、Phase2の業務6テーブルと登録・閲覧・編集、Phase3の基本集計とエラー一覧を実装。
+OpenAI APIはサーバー側のみ使用。アプリのルートは `app/`。
+Phase1の認証基盤、Phase2の業務6テーブルと登録・閲覧・編集、Phase3の基本集計とエラー一覧、Phase4の画像保存・構造化読取・確認用JSON保存を実装。
 
 ## DB設計・複数店舗
 店舗データの根にstore_idを持たせ、子データはFKとRLSで店舗境界を維持する。
@@ -22,11 +22,12 @@ profilesの自己昇格は禁止。RLSを必須にし、画面のチェックだ
 各Server Actionと各データ取得で認証・有効プロファイルを再確認する。
 
 ## セキュリティ
-未認証の業務データアクセスを禁止。非公開画像は後続PhaseでStorage RLS・短時間署名URLを実装。
+未認証の業務データアクセスを禁止。非公開画像はStorage RLSと認証付き画像APIで保護する。画像閲覧を公開URLにしない。
 .env.local / 秘密情報 / DBパスワード / OpenAI API Keyをコミットしない。
 Supabase Publishable Keyは公開用キーだが、それだけで業務データを公開しない。
-Service Role/Secret KeyをNEXT_PUBLIC変数に入れない。Phase1〜Phase3アプリには不要。
+Service Role/Secret KeyをNEXT_PUBLIC変数に入れない。Phase4はSUPABASE_SECRET_KEYをサーバー専用で使う。利用前にAuth/RLS確認とDBで現在のactor権限再確認を必須にする。
 個人情報、パスワード、トークン、DB/APIの生エラーをconsoleやエラーログに出さない。
+Next.jsのServer Function引数・検索URL・ブラウザログ転送を有効化しない。
 本人確認番号は将来専用のアクセス層・暗号化へ移せるよう扱う。
 本番データへの破壊的操作を避け、migrationをレビュー可能なファイルにする。
 
@@ -54,4 +55,8 @@ RLS変更時は `app/tests/rls.test.ts` と `app/tests/business-rls.test.ts` を
 Phase3集計はget_dashboard_summary（SECURITY INVOKER）で既存取引を日本時間の暦日/月から算出する。
 RESTの行数上限に依存するクライアント集計をしない。成約金額未入力は件数を表示し、0円と区別する。
 集計・エラー一覧もRLSを通し、Service Roleを使わない。集計/RLS変更時はreporting-rls.test.tsも確認する。
-Phase3のエラー再処理は未実装。無効化ボタンを動作可能に見せない。
+Phase4の再処理は失敗または2分の処理期限超過だけ。トークンで古い応答を拒否する。
+新画像は署名アップロードで直接Storageへ転送し、実画像検証後に公開先パスを確定する。10MB/4,000万画素上限、上書き不可。
+本人確認書類の単独画像はOpenAIへ送らない。AIカード番号はnull、単独「不」は未判定。正式カテゴリ体系はseedしない。
+ai_resultは保持し、reviewed_resultへ修正を保存する。Phase5まで顧客・取引・明細への確定登録を追加しない。
+Storage/RPC/AI変更時はimage-rls.test.tsとimage-reading.test.tsを実行する。

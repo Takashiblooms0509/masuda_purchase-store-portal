@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { readingConfigured } from "@/lib/documents/config";
+import { processingCutoff } from "@/lib/documents/processing";
+import { ReadButton } from "../imports/read-button";
 import { z } from "zod";
 import { businessSession } from "@/lib/business/access";
 import { PageTitle, Empty, Pagination } from "@/components/business-ui";
@@ -19,10 +22,12 @@ export default async function ErrorsPage({
   let query = supabase
     .from("document_imports")
     .select(
-      "id,store_id,file_name,created_at,document_type,processing_status,error_message,retry_count",
+      "id,store_id,file_name,created_at,document_type,processing_status,processing_started_at,error_message,retry_count,file_url,file_size",
       { count: "exact" },
     )
-    .eq("processing_status", "failed");
+    .or(
+      `processing_status.eq.failed,and(processing_status.eq.processing,processing_started_at.lt.${processingCutoff()})`,
+    );
   if (storeId) query = query.eq("store_id", storeId);
   const {
     data: imports,
@@ -40,7 +45,7 @@ export default async function ErrorsPage({
         description="画像読取に失敗した原本と、エラー内容を確認できます。"
       />
       <p id="retry-help" className="notice warning">
-        再処理は画像読取機能の追加後に利用できます。現在は原本情報の確認・編集ができます。
+        再処理では画像をOpenAIへ送信します。完了後は原本と照合して読取結果を確認してください。
       </p>
       {profile.role === "admin" && (
         <section className="card">
@@ -94,28 +99,34 @@ export default async function ErrorsPage({
                     <td>{importTypes[document.document_type]}</td>
                     <td>
                       <span className="badge failed">
-                        {processingLabels[document.processing_status]}
+                        {document.processing_status === "processing"
+                          ? "処理タイムアウト"
+                          : processingLabels[document.processing_status]}
                       </span>
                       <span className="cell-sub">
                         再試行 {document.retry_count}回
                       </span>
                     </td>
                     <td className="import-error-message">
-                      {document.error_message ||
+                      {(document.processing_status === "processing"
+                        ? "前回の処理が終了していません。再処理できます。"
+                        : document.error_message) ||
                         "エラーの詳細は記録されていません。"}
                     </td>
                     <td>
-                      <button
-                        className="secondary retry-unavailable"
-                        type="button"
-                        disabled
-                        aria-describedby="retry-help"
-                      >
-                        再処理
-                      </button>
+                      <ReadButton
+                        id={document.id}
+                        status={document.processing_status}
+                        enabled={
+                          readingConfigured() &&
+                          document.document_type === "purchase_document" &&
+                          Boolean(document.file_url && document.file_size)
+                        }
+                        expired={document.processing_status === "processing"}
+                      />
                       <Link
                         className="cell-sub text-link"
-                        href={`/imports?document=${document.id}`}
+                        href={`/imports/${document.id}`}
                       >
                         原本情報を確認
                       </Link>

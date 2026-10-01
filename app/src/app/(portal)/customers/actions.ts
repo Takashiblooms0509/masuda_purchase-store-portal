@@ -132,7 +132,7 @@ export async function saveCustomerDocument(
   }
   revalidatePath(`/customers/${customer_id}`);
   return {
-    message: "書類情報を保存しました。画像アップロードはPhase4で追加します。",
+    message: "書類情報を保存しました。",
     success: true,
   };
 }

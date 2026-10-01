@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { businessSession, validId } from "@/lib/business/access";
 import { PageTitle, Empty, Pagination } from "@/components/business-ui";
 import { CustomerForm, CustomerDocumentForm } from "../forms";
+import { UploadForm } from "../../imports/upload-form";
+import { uploadConfigured } from "@/lib/documents/config";
 import { datetime, money, documentTypes } from "@/lib/business/format";
 export default async function CustomerPage({
   params,
@@ -51,7 +53,7 @@ export default async function CustomerPage({
       <section className="card">
         <h2>本人確認書類</h2>
         <p className="muted">
-          Phase2では書類情報を管理します。画像のアップロード・参照はPhase4で追加します。
+          本人確認書類画像は非公開で保存します。顧客ごとに複数画像を登録できます。
         </p>
         {!documentsResult.data?.length ? (
           <Empty>書類情報はありません。</Empty>
@@ -62,6 +64,7 @@ export default async function CustomerPage({
                 <th>種別</th>
                 <th>ファイル名</th>
                 <th>登録日時</th>
+                <th>画像</th>
                 <th>編集</th>
               </tr>
             </thead>
@@ -71,6 +74,31 @@ export default async function CustomerPage({
                   <td>{documentTypes[d.document_type]}</td>
                   <td>{d.file_name}</td>
                   <td>{datetime(d.created_at)}</td>
+                  <td>
+                    {d.file_url ? (
+                      <Link
+                        className="text-link"
+                        href={`/api/documents/customer_document/${d.id}/image`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        画像を表示
+                      </Link>
+                    ) : (
+                      <details>
+                        <summary>画像を追加</summary>
+                        <UploadForm
+                          stores={stores}
+                          storeId={customer.store_id}
+                          id={d.id}
+                          kind="customer_document"
+                          customerId={id}
+                          documentType={d.document_type}
+                          enabled={uploadConfigured()}
+                        />
+                      </details>
+                    )}
+                  </td>
                   <td>
                     <details>
                       <summary>編集</summary>
@@ -82,6 +110,17 @@ export default async function CustomerPage({
             </tbody>
           </table>
         )}
+        <details className="section-detail">
+          <summary>本人確認書類画像を追加</summary>
+          <UploadForm
+            stores={stores}
+            storeId={customer.store_id}
+            kind="customer_document"
+            customerId={id}
+            documentType="drivers_license"
+            enabled={uploadConfigured()}
+          />
+        </details>
         <details className="section-detail">
           <summary>書類情報を追加</summary>
           <CustomerDocumentForm customerId={id} />

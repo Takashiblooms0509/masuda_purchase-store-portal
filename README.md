@@ -3,9 +3,9 @@
 顧客・買取・来店・商品明細・原本画像を店舗別に一元管理する業務システム。
 Next.js / TypeScript / Supabase PostgreSQL・Auth / Vercel。
 
-現在は **Phase3（基本ダッシュボード・読取エラー一覧）** まで実装。
+現在は **Phase4（非公開画像・AI読取・確認内容保存）** まで実装。
 本番URL：[買取店管理ポータル](https://masuda-purchase-store-portal.vercel.app)。
-Phase3は集計関数の追加migrationとコード反映が必要。実画像・AI読取・再処理はPhase4以降。
+Phase4は追加migrationとサーバー専用環境変数の設定が必要。顧客・取引への確定登録はPhase5で追加する。
 
 ## 実装済み
 - メール・パスワードログイン、HttpOnly Cookieによるセッション、ログアウト
@@ -21,12 +21,17 @@ Phase3は集計関数の追加migrationとコード反映が必要。実画像�
 - 日本時間の本日/今月の来店・成約・買取金額、最近の取引5件
 - 店舗別の読取エラー一覧・ページ送り・該当原本情報へのリンク
 
+- 非公開の買取計算書・本人確認書類画像のアップロードと認証済み画像参照
+- OpenAI構造化読取、原本との比較、複数明細の修正・確認用JSONの保存
+- 読取エラーの再処理、処理競合・同時編集の上書き防止
+
 ## 設計レビュー
 [Phase1設計レビュー](docs/design-review.md) にシステム構成、ER図、PK/FK、RLS、
 ディレクトリ、6段階の開発計画、環境変数、各サービス設定、実装/保留範囲、懸念点を記載。
 [DB設計](docs/database.md)に最低限8テーブルの全カラムと関係を記載。
 Phase1 migrationはstores / profiles、Phase2 migrationは残り6つの業務テーブルを作成する。
-[Phase2の設定・確認手順](docs/phase2-setup.md)、[Phase3の追加SQL・確認手順](docs/phase3-setup.md)を参照。
+[Phase2の設定・確認手順](docs/phase2-setup.md)、[Phase3の追加SQL・確認手順](docs/phase3-setup.md)、
+[Phase4のSQL・環境変数・画像確認手順](docs/phase4-setup.md)を参照。
 
 ## 起動
 Node.js 24.x推奨（対応範囲22.12以上24.xまで）、npmを使用。
@@ -52,9 +57,10 @@ npm run dev
 5. [Vercel手順](docs/deploy-vercel.md)に沿ってRoot Directory=appでデプロイ
 6. Phase1設定済みの場合は [Phase2手順](docs/phase2-setup.md) の追加SQLだけを適用（Phase1の再実行は不要）
 7. Phase2設定済みの場合は [Phase3手順](docs/phase3-setup.md) の集計関数SQLだけを適用（既存SQLの再実行は不要）
+8. Phase3設定済みの場合は [Phase4手順](docs/phase4-setup.md) の追加SQLと環境変数設定を行う
 
-DBパスワード・Supabase Secret/Service Role KeyはPhase1〜Phase3アプリに不要。
-OpenAI API KeyはPhase4で `OPENAI_API_KEY` に設定するまで不要。
+Phase4は `SUPABASE_SECRET_KEY` / `OPENAI_API_KEY` / `OPENAI_MODEL` をサーバー専用変数へ設定する。
+DBパスワードはアプリに不要。秘密情報をコードへ埋め込まない。
 秘密情報やパスワードをCodexへ送らない。
 
 ## 検証
@@ -68,12 +74,15 @@ RLSテストはPGliteのPostgreSQLで実SQLを実行し、Supabase Authのauth.u
 実SupabaseのAuth・REST・Cookieを含む確認とは別の検証である。
 Phase1の本番公開・admin/staffログインと管理画面権限制御はユーザー確認済み。
 Phase2の実Supabase適用・本番顧客/取引/明細操作・staff制御はユーザー確認済み。
-Phase3の実Supabase適用・本番確認は追加SQL適用後に行う。
+Phase3の実Supabase適用・ダッシュボード/エラー一覧・staff集計はユーザー確認済み。
+Phase4の実Supabase・OpenAI・Vercel確認は追加設定後に行う。
 CIでは同じチェックを実行する。手動公開後の確認はSupabase手順の「実プロジェクト検証」を参照。
 
 ## セキュリティと今後
 .env.localはGit管理外。公開用Publishable KeyはRLSと組み合わせる。
 権限はprofilesを正とし、staffは自分のprofileを変更できない。
-原本画像は後続Phaseで非公開Storage・署名URLへ保存し、AIの結果は必ず人が確認してからDB確定する。
+原本画像は非公開Storageへ保存し、閲覧時は認証・RLSを確認する。
+AI原値と人の修正値を分離する。カード番号と単独「不」は認識ルール未確定のため手動確認する。
+Phase4は確認内容の保存まで。AIから顧客・取引・明細を自動登録しない。
 FC Excelの列を内部DBへ直接持ち込まない。販売・卸テーブルは仕様確定後に設計する。
 詳細な開発ルールは [AGENTS.md](AGENTS.md)。
