@@ -59,3 +59,23 @@ details[open] { min-width: 350px; }
 details .stack { margin-top: 18px; }
 @media (max-width: 900px) { .sidebar { width: 200px; padding-left: 10px; padding-right: 10px; } .page-content { padding: 24px; } .form-grid, .summary-grid { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .portal-shell { display: block; } .sidebar { width: 100%; } .brand { padding-bottom: 12px; } .sidebar-account { padding-top: 16px; } .topbar { padding: 0 20px; } .page-content { padding: 20px; } .card { padding: 18px; overflow-x: auto; } .login-card { padding: 28px; } }
+textarea { display:block; width:100%; margin-top:6px; border:1px solid #b8c7d3; border-radius:6px; background:white; padding:10px 12px; font:inherit; color:var(--ink); resize:vertical; }
+textarea:focus-visible { outline:3px solid #5cb7a6; outline-offset:3px; }
+.page-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+.page-heading h2 { margin-bottom:0; }
+.required { color:#9a302b; font-size:11px; font-weight:400; }
+.filter-bar { display:flex; align-items:flex-end; flex-wrap:wrap; gap:16px; }
+.filter-bar label { flex:1; min-width:160px; }
+.text-link { color:var(--primary); text-decoration:underline; text-underline-offset:3px; }
+.empty { padding:24px 0; color:var(--muted); }
+.pagination { display:flex; align-items:center; gap:20px; margin-top:20px; }
+.pagination a { color:var(--primary); text-decoration:underline; }
+.candidate-panel { border:1px solid #a7cfc2; border-radius:8px; padding:20px; background:#f4faf7; }
+.item-editor { margin:20px 0; border:1px solid var(--border); border-radius:8px; padding:18px; }
+.item-editor legend { font-weight:650; padding:0 8px; }
+.warning { background:#fff6df; color:#805b10; }
+.lookup-panel { display:flex; align-items:flex-end; flex-wrap:wrap; gap:12px; margin-top:20px; }
+.lookup-panel label { min-width:250px; }
+.wide { grid-column:1/-1; }
+.section-detail { margin-top:24px; }
+@media(max-width:620px) { .page-heading { flex-direction:column; } .lookup-panel label { min-width:0; width:100%; } }
