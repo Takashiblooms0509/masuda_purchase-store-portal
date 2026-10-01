@@ -2,7 +2,8 @@
 
 Phase1の実DDLは `supabase/migrations/202610010001_phase1_auth_stores.sql`。
 Phase2の実DDLは `supabase/migrations/202610010002_phase2_business.sql`。
-Phase3の集計関数は `supabase/migrations/202610010003_phase3_reporting.sql`。将来の卸・販売テーブルは定義しない。
+Phase3の集計関数は `supabase/migrations/202610010003_phase3_reporting.sql`。
+Phase4の画像・読取処理は `supabase/migrations/202610010004_phase4_image_reading.sql`。将来の卸・販売テーブルは定義しない。
 全idはUUID。日時はtimestamptz、日付はdate、金額はnumeric(14,2)、数量/重量を数値化する場合はnumeric。
 created_at / updated_atはnot null・now()、updated_atはDBトリガー更新。
 指定のない業務値はnullを許可し、未読取・未確定を空文字や0と混同しない。
@@ -97,12 +98,12 @@ store_idとカード/電話/氏名/生年月日検索の索引を追加。find_c
 | retry_count | integer NOT NULL default 0、CHECK >= 0 |
 | processed_at | timestamptz nullable |
 | created_at, updated_at | timestamptz NOT NULL |
-| ai_result | jsonb nullable、Phase4追加案：構造化された読取原データ |
-| reviewed_result | jsonb nullable、Phase4追加案：確認中データ。確定業務レコードと別 |
-| ai_schema_version | text nullable、Phase4追加案：読取構造のバージョン |
+| ai_result | jsonb nullable、Phase4追加：構造化された読取原データ |
+| reviewed_result | jsonb nullable、Phase4追加：確認中データ。確定業務レコードと別 |
+| ai_schema_version | text nullable、Phase4追加：読取構造のバージョン |
 
 UNIQUE(id, store_id)。AI結果は人の確認前でも取込テーブルに保存できるが、顧客/取引/明細には登録しない。
-処理ロック・重複確定・再試行競合をPhase4–5で実装する。
+処理トークン・再試行競合はPhase4で制御する。人の確認から業務テーブルへの登録はPhase5で追加する。
 
 ## Phase2：purchase_transactions
 | カラム | 型・制約 |
@@ -162,12 +163,12 @@ AIのカテゴリ候補・確定カテゴリの表示をPhase5で実装し、信
 共通マスタとしてadmin管理・staff参照。正式体系を勝手にseedしない。
 親子構造とlevel整合性・循環禁止をPhase2のトリガー/管理処理で保証する。
 
-## RLS・ファイルの後続設計
+## RLS・ファイル設計
 すべての業務表でRLSを有効化しauthenticatedだけに必要なSELECT/INSERT/UPDATE権限を付与する。
 根テーブルはprivate.can_access_store(store_id)、子表は親レコード経由で同条件を検証する。
 INSERT/UPDATEはWITH CHECKで他店舗への差替えを禁止。共通カテゴリの更新はadminだけ。
-非公開Storageでは `<store UUID>/<import or customer UUID>/<random file name>` のパスを用い、
-stores/profilesの有効状態をRLSで照会する。画面の画像参照は短時間署名URL。
+非公開Storageでは `<store UUID>/<import または customer_document>/<document UUID>/source.jpg または source.png` を用い、
+stores/profilesの有効状態と検証済みfile_urlをRLSで照会する。画像閲覧は認証付きAPI経由で毎回確認する。
 取引・明細保存はログインユーザー権限のsave_purchase_transaction関数で原子的に実行する。Service Roleは使用しない。
 
 ## Phase2の権限と未実装境界
@@ -176,7 +177,7 @@ stores/profilesの有効状態をRLSで照会する。画面の画像参照は�
 カテゴリはadminが管理しstaffは参照。階層はトリガー計算、親変更の循環禁止と子孫level更新をDBで保証する。
 file_url・uploaded_at・AI処理状態・retry_countなどはユーザーが手動書換えできない列として予約する。
 Phase2ではファイル名/種別の管理まで。実画像、AI結果、再処理、エラーメニュー、ダッシュボード集計は後続Phase。
-ai_result / reviewed_result / ai_schema_versionの3列はPhase4案であり今回のDDLには含めない。
+ai_result / reviewed_result / ai_schema_versionはPhase4 migrationで追加する。
 初回/最終来店日は成約・不成約を含む取引日から日本時間で再計算する。集計の「本日」も日本時間の暦日とする。独自の営業日締め時刻は未定義。
 
 
@@ -196,3 +197,48 @@ today_purchase_total / today_unpriced、month_visits / month_completed / month_p
 原本IDの直接リンクもRLSを通し、staffが他店舗IDを指定しても表示できない。
 取引/顧客保存後はダッシュボードを、原本情報の編集後はエラー一覧を再検証する。
 AIのエラー作成・再処理・処理状態変更はPhase4以降。
+
+
+## Phase4：画像・構造化読取
+
+PK/FKと8業務テーブルの関係は維持する。
+
+| 追加対象 | カラム | 型・意味 |
+|---|---|---|
+| document_imports / customer_documents | upload_path | text nullable、署名アップロードの予約先（未検証時はfile_urlを設定しない） |
+| 同上 | content_type | text nullable、CHECK image/jpegまたはimage/png |
+| 同上 | expected_file_size / file_size | bigint nullable、CHECK 1〜10,485,760。予約サイズ / 検証完了サイズ |
+| document_imports | processing_started_at | timestamptz nullable、2分の処理期限 |
+| document_imports | processing_token | uuid nullable、処理試行の識別子。古い応答を拒否 |
+| document_imports | ai_result | jsonb nullable、型検証済みAI原読取値 |
+| document_imports | reviewed_result | jsonb nullable、人による確認・修正内容 |
+| document_imports | ai_schema_version / ai_model | text nullable、purchase-v1 / 実行モデル |
+
+ai_resultのJSON Schemaは `app/src/lib/ai/schemas.ts` を正とする。日付・日本時間オフセットの日時、非負の数値、最大200明細、nullableで不明を保持する。
+membership_card_numberはAI側ではnull固定、reviewed_resultで手入力可能。
+修正明細はsource_line_indexでAI原明細を参照し、raw_item_nameの改ざん・同じ原行の重複をDBで拒否する。
+手動追加行のsource_line_index/raw_item_nameはnull。行除去してもai_resultの原記載は保持する。
+updated_atの一致を要求し、同時編集による修正の上書きを拒否する。
+
+| RPC | EXECUTE | 内容 |
+|---|---|---|
+| prepare_document_upload | service_roleのみ | actorの現在の店舗権限、種類、形式・サイズを確認し保存先を予約 |
+| complete_document_upload | service_roleのみ | actorとStorageメタデータを照合し、サーバーで画像検証後に参照先を設定 |
+| claim_import_processing | service_roleのみ | row lock、purchase_documentかつ検証済み原本のみ。処理トークンと期限を取得 |
+| finish_import_processing | service_roleのみ | actorを再確認し、同じ試行の結果のみ保存。エラーはコード別の固定文に変換 |
+| save_import_review | authenticatedのみ | 呼出者の店舗権限、更新日時、原読取値の保持を確認して修正JSONだけ保存 |
+
+上記はSECURITY DEFINER、空search_path、必要なEXECUTE権限だけに限定する。
+trusted RPCにはサーバーでgetUserと通常RLSを確認したuser.idを渡す。クライアント申告のactorを使わない。
+新列はPhase2の列単位INSERT/UPDATE許可に追加しない。authenticatedはAI原値・処理状態・予約先・file_urlを直接改変できない。
+通常の顧客・取引・集計・修正保存・画像閲覧は利用者権限で行う。
+
+Storage bucket `portal-source-documents` は非公開、10MB、JPG/PNGのみ。
+SELECTは原本/顧客書類と店舗RLSを照合する。広いpermissiveポリシーが存在しても、このbucketにはrestrictiveガードを適用し、匿名参照・直接INSERT/UPDATE/DELETEを拒否する。
+画像転送だけは保存先限定・上書き不可の署名アップロードURLを使う。サーバーで実形式・画素数・画像デコードを検証する。
+本人確認書類画像は非公開保存と参照だけで、OpenAIへ送信しない。
+
+状態遷移：pending → processing → review_required、失敗時はfailed。failedまたは2分超のprocessingは手動で再処理可能。
+初回retry_countは0、再試行時に増加する。review_requiredとcompleted、業務取引に紐付け済みの原本は再読取しない。
+エラー一覧にfailedと処理期限を超えたprocessingを表示する。OpenAI待ち時間は40秒。
+Phase4の修正保存ではreview_requiredを維持し、顧客・取引・明細を書き込まない。

@@ -2,7 +2,7 @@
 
 Phase1の公開と本番admin/staffログイン・権限制御はユーザー確認済み。
 本番URL：[買取店管理ポータル](https://masuda-purchase-store-portal.vercel.app)。
-以下は初回設定の手順。後続Phaseではプロジェクトを作り直さず、[Phase2手順](phase2-setup.md) / [Phase3手順](phase3-setup.md)の追加SQLを先に実施する。
+以下は初回設定の手順。後続Phaseではプロジェクトを作り直さず、[Phase2手順](phase2-setup.md) / [Phase3手順](phase3-setup.md) / [Phase4手順](phase4-setup.md)の追加SQLを先に実施する。
 Supabase初期設定を先に完了する： [setup-supabase.md](setup-supabase.md)。
 
 【ユーザー作業】
@@ -18,7 +18,8 @@ Supabase初期設定を先に完了する： [setup-supabase.md](setup-supabase.
 
 環境変数変更後はRedeployが必要。秘密情報はソースに書かない。
 Phase1〜Phase3ではOpenAI API Key、Supabase Secret/Service Role Key、DBパスワードの設定は不要。
-後続PhaseでOPENAI_API_KEY / OPENAI_MODELをサーバー専用変数として設定する。
+Phase4はSUPABASE_SECRET_KEY / OPENAI_API_KEY / OPENAI_MODELをサーバー専用変数として設定する。
+具体的なキー取得・設定・反映順は [Phase4設定手順](phase4-setup.md) を参照。NEXT_PUBLIC_を付けない。
 
 ## GitHubの反映
 変更がPRとして提示された場合、Files changedで内容を確認し、Phase1をmainへマージしてから本番Deployする。
@@ -44,3 +45,5 @@ Previewもアプリ内認証・RLSで保護されるが、本番DBへ接続し�
 氏名・住所・電話番号・パスワード・認証トークン・画像をログに出さない。
 本実装は外部サービスの生エラーを表示/記録せず、操作別の一般的なエラーだけを表示する。
 Vercelのログを共有する場合も秘密情報や個人情報がないか確認する。
+
+Next.js開発サーバーのServer Function引数・リクエストURL・ブラウザログ転送も無効化し、入力値や顧客検索語が開発ログへ出ないようにしている。

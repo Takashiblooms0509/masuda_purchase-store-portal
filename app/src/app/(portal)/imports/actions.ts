@@ -47,8 +47,7 @@ export async function saveImport(
   revalidatePath("/errors");
   revalidatePath("/purchases", "layout");
   return {
-    message:
-      "原本情報を保存しました。画像アップロード・AI処理はPhase4で追加します。",
+    message: "原本情報を保存しました。",
     success: true,
   };
 }

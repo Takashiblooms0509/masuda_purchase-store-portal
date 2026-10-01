@@ -2,6 +2,8 @@ import { businessSession } from "@/lib/business/access";
 import Link from "next/link";
 import { z } from "zod";
 import { PageTitle, Empty, Pagination } from "@/components/business-ui";
+import { UploadForm } from "./upload-form";
+import { uploadConfigured, readingConfigured } from "@/lib/documents/config";
 import { ImportForm } from "./form";
 import { datetime, importTypes, processingLabels } from "@/lib/business/format";
 export default async function ImportsPage({
@@ -29,14 +31,22 @@ export default async function ImportsPage({
     <>
       <PageTitle
         title="データ取込"
-        description="原本情報と処理状況の管理基盤です。画像アップロード・AI読取はPhase4で追加します。"
+        description="買取計算書画像をアップロードし、AI読取後に原本と照合して確認できます。"
       />
       <section className="card">
-        <h2>原本情報を登録</h2>
-        <p className="muted">
-          ファイル名と種別を登録できます。この操作では画像やAI読取結果は登録されません。
-        </p>
-        <ImportForm stores={stores} />
+        <h2>買取計算書画像をアップロード</h2>
+        <UploadForm
+          stores={stores}
+          enabled={uploadConfigured()}
+          autoRead={readingConfigured()}
+        />
+        <details className="section-detail">
+          <summary>原本情報だけを登録</summary>
+          <p className="muted">
+            ファイル名と種別を登録できます。この操作では画像やAI読取結果は登録されません。
+          </p>
+          <ImportForm stores={stores} />
+        </details>
       </section>
       <section className="card">
         <h2>原本一覧</h2>
@@ -67,7 +77,11 @@ export default async function ImportsPage({
               <tbody>
                 {data.map((d) => (
                   <tr key={d.id}>
-                    <td>{d.file_name}</td>
+                    <td>
+                      <Link className="text-link" href={`/imports/${d.id}`}>
+                        {d.file_name}
+                      </Link>
+                    </td>
                     <td>{stores.find((s) => s.id === d.store_id)?.name}</td>
                     <td>{importTypes[d.document_type]}</td>
                     <td>{datetime(d.created_at)}</td>
@@ -76,7 +90,26 @@ export default async function ImportsPage({
                         {processingLabels[d.processing_status]}
                       </span>
                     </td>
-                    <td>アップロード機能は準備中</td>
+                    <td>
+                      {d.file_url ? (
+                        <Link
+                          className="text-link"
+                          href={`/api/documents/import/${d.id}/image`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          画像を表示
+                        </Link>
+                      ) : (
+                        "画像未登録"
+                      )}
+                      <Link
+                        className="cell-sub text-link"
+                        href={`/imports/${d.id}`}
+                      >
+                        原本・読取結果を確認
+                      </Link>
+                    </td>
                     <td>
                       <details>
                         <summary>編集</summary>

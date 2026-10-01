@@ -12,6 +12,12 @@ export function ImportForm({
   stores: Store[];
 }) {
   const [state, action, pending] = useActionState(saveImport, { message: "" });
+  const typeLocked = Boolean(
+    document &&
+    (document.upload_path ||
+      document.file_url ||
+      document.processing_status !== "pending"),
+  );
   return (
     <form
       onReset={(event) => event.preventDefault()}
@@ -29,6 +35,7 @@ export function ImportForm({
           書類種別
           <select
             aria-label="書類種別"
+            disabled={typeLocked}
             name="document_type"
             defaultValue={document?.document_type ?? "purchase_document"}
           >
@@ -38,6 +45,13 @@ export function ImportForm({
               </option>
             ))}
           </select>
+          {typeLocked && (
+            <input
+              type="hidden"
+              name="document_type"
+              value={document!.document_type}
+            />
+          )}
         </label>
         <label>
           ファイル名
