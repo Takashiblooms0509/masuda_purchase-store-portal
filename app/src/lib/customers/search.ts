@@ -31,7 +31,7 @@ export type DirectoryCustomer = Pick<
   | "phone"
   | "membership_card_number"
   | "created_at"
->;
+> & { age?: number | null; gender?: Customer["gender"] };
 
 export function parseCustomerSearch(
   params: Record<string, string | string[] | undefined>,
@@ -77,6 +77,11 @@ const directoryCustomerSchema = z.strictObject({
   phone: z.string().nullable(),
   membership_card_number: z.string().nullable(),
   created_at: z.string(),
+  age: z.number().int().nullable().optional(),
+  gender: z
+    .enum(["female", "male", "other", "unspecified"])
+    .nullable()
+    .optional(),
 });
 export const customerDirectorySchema = z.strictObject({
   customers: z.array(directoryCustomerSchema).max(30),

@@ -32,6 +32,8 @@ export type CustomerFields = {
   membership_card_number: string | null;
   identification_type: string | null;
   identification_number: string | null;
+  gender?: "female" | "male" | "other" | "unspecified" | null;
+  memo?: string | null;
 };
 export type Customer = Timestamps &
   CustomerFields & {
@@ -227,6 +229,18 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      get_customer_detail: {
+        Args: { p_customer: string; p_page?: number; p_document_page?: number };
+        Returns: Json;
+      };
+      customer_media_source: {
+        Args: { p_actor: string; p_customer: string; p_document: string };
+        Returns: Json;
+      };
+      insert_customer_csv: {
+        Args: { p_request: string; p_rows: Json };
+        Returns: number;
+      };
       get_customer_directory: {
         Args: {
           p_name?: string;

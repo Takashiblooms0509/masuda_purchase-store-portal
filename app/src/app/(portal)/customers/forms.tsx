@@ -16,7 +16,7 @@ import type {
 } from "@/types/database";
 
 const fields: {
-  key: Exclude<keyof CustomerFields, "dm_allowed">;
+  key: Exclude<keyof CustomerFields, "dm_allowed" | "gender" | "memo">;
   label: string;
   type?: string;
   max: number;
@@ -39,13 +39,16 @@ const fields: {
 export function CustomerForm({
   customer,
   stores,
+  formId,
 }: {
   customer?: Customer;
   stores: Store[];
+  formId?: string;
 }) {
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(fields.map(({ key }) => [key, customer?.[key] ?? ""])),
   );
+  const [revealed, setRevealed] = useState(false);
   const [dm, setDm] = useState(
     customer?.dm_allowed === true
       ? "true"
@@ -62,6 +65,7 @@ export function CustomerForm({
   );
   return (
     <form
+      id={formId}
       onReset={(event) => event.preventDefault()}
       action={action}
       className="stack"
@@ -81,7 +85,14 @@ export function CustomerForm({
             {key === "name" && <span className="required"> 必須</span>}
             <input
               name={key}
-              type={type ?? "text"}
+              type={
+                key === "identification_number"
+                  ? revealed
+                    ? "text"
+                    : "password"
+                  : (type ?? "text")
+              }
+              autoComplete={key === "identification_number" ? "off" : undefined}
               maxLength={max}
               required={key === "name"}
               value={values[key]}
@@ -89,8 +100,28 @@ export function CustomerForm({
                 setValues((v) => ({ ...v, [key]: e.target.value }))
               }
             />
+            {key === "identification_number" && (
+              <button
+                type="button"
+                className="secondary"
+                aria-pressed={revealed}
+                onClick={() => setRevealed(!revealed)}
+              >
+                {revealed ? "番号を隠す" : "番号を表示"}
+              </button>
+            )}
           </label>
         ))}
+        <label>
+          性別
+          <select name="gender" defaultValue={customer?.gender ?? ""}>
+            <option value="">未登録</option>
+            <option value="female">女性</option>
+            <option value="male">男性</option>
+            <option value="other">その他</option>
+            <option value="unspecified">未回答</option>
+          </select>
+        </label>
         <label>
           DM可否
           <select
@@ -103,6 +134,14 @@ export function CustomerForm({
             <option value="true">可</option>
             <option value="false">不可</option>
           </select>
+        </label>
+        <label className="customer-wide">
+          メモ
+          <textarea
+            name="memo"
+            maxLength={1000}
+            defaultValue={customer?.memo ?? ""}
+          />
         </label>
       </div>
       <Feedback state={state} />

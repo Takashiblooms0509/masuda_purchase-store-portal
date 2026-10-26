@@ -23,6 +23,11 @@ export const customerSchema = z.object({
   membership_card_number: text(100),
   identification_type: text(100),
   identification_number: text(100),
+  gender: z
+    .enum(["female", "male", "other", "unspecified"])
+    .nullable()
+    .optional(),
+  memo: text(1000).optional(),
 });
 export const itemSchema = z.object({
   purchase_status: z.enum(["pending", "completed", "not_completed"]).optional(),
@@ -109,11 +114,15 @@ export function customerInput(form: FormData) {
     "membership_card_number",
     "identification_type",
     "identification_number",
+    "gender",
+    "memo",
   ];
   return {
     ...Object.fromEntries(
       fields.map((key) => [key, nullableString(form, key)]),
     ),
+    gender: form.has("gender") ? nullableString(form, "gender") : undefined,
+    memo: form.has("memo") ? nullableString(form, "memo") : undefined,
     dm_allowed:
       form.get("dm_allowed") === "true"
         ? true

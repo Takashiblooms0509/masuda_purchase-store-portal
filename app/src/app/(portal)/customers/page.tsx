@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { customerDetailSchema, genderLabels } from "@/lib/customers/detail";
+import { CustomerAdd } from "@/components/customers/add";
 import { businessSession, storeAllowed } from "@/lib/business/access";
 import { PageTitle, Empty, Pagination } from "@/components/business-ui";
 import { CustomerDetailPanel } from "@/components/customers/detail-panel";
@@ -17,7 +19,16 @@ export default async function CustomersPage({
 }) {
   const session = await businessSession();
   const { supabase, stores: writableStores, profile } = session;
-  const { value, result } = parseCustomerSearch(await searchParams);
+  const params = await searchParams;
+  const historyPage = Math.max(
+    1,
+    Math.min(10000, Math.trunc(Number(params.historyPage) || 1)),
+  );
+  const documentPage = Math.max(
+    1,
+    Math.min(10000, Math.trunc(Number(params.documentPage) || 1)),
+  );
+  const { value, result } = parseCustomerSearch(params);
   let errorMessage = !result.success
     ? "検索条件を確認してください。登録日は0001年から9999年の正しい日付で、開始日から終了日の順に指定してください。"
     : "";
@@ -48,7 +59,7 @@ export default async function CustomersPage({
   // Directory store labels are read-only; never feed them into businessSession/storeAllowed.
   const stores = report?.stores ?? writableStores;
   const filterForm = (
-    <section className="card">
+    <section className="card customer-filter-card">
       <form
         className="customer-search"
         key={JSON.stringify([
@@ -121,12 +132,16 @@ export default async function CustomersPage({
     </section>
   );
   const title = (
-    <PageTitle
-      title="顧客管理"
-      description="登録店舗や連絡先から検索し、一覧の右側で顧客情報を確認できます。"
-      href="/customers/new"
-      action="顧客を登録"
-    />
+    <div className="page-heading customer-heading">
+      <PageTitle
+        title="顧客管理"
+        description="登録店舗や連絡先から検索し、右側で詳細を確認できます。"
+      />
+      <CustomerAdd
+        stores={writableStores.filter((s) => s.is_active)}
+        actorKey={profile.id}
+      />
+    </div>
   );
   if (errorMessage || !result.success || !report)
     return (
@@ -140,17 +155,20 @@ export default async function CustomersPage({
     );
   const filters = result.data;
   const { customers, total: count, selected } = report;
-  const editResult =
-    selected && profile.role === "admin"
-      ? await supabase
-          .from("customers")
-          .select("*")
-          .eq("id", selected.id)
-          .maybeSingle()
-      : { data: null, error: null };
-  const editError = editResult.error
-    ? "顧客編集情報を取得できません。再度選択してください。"
-    : "";
+  const detailResult = selected
+    ? await supabase.rpc("get_customer_detail", {
+        p_customer: selected.id,
+        p_page: historyPage,
+        p_document_page: documentPage,
+      })
+    : { data: null, error: null };
+  const parsedDetail = customerDetailSchema.safeParse(detailResult.data);
+  const detail =
+    !detailResult.error && parsedDetail.success ? parsedDetail.data : undefined;
+  const editError =
+    selected && !detail
+      ? "顧客詳細を取得できません。再度選択してください。"
+      : "";
   return (
     <>
       {title}
@@ -169,9 +187,10 @@ export default async function CustomersPage({
               <table>
                 <thead>
                   <tr>
-                    <th>顧客名</th>
-                    <th>登録店舗</th>
-                    <th>電話番号</th>
+                    <th>名前</th>
+                    <th>店舗</th>
+                    <th>年齢</th>
+                    <th>性別</th>
                     <th>カード番号</th>
                     <th>登録日時</th>
                   </tr>
@@ -199,7 +218,8 @@ export default async function CustomersPage({
                       <td>
                         {stores.find((s) => s.id === c.store_id)?.name ?? "—"}
                       </td>
-                      <td>{c.phone ?? "—"}</td>
+                      <td>{c.age == null ? "—" : `${c.age}歳`}</td>
+                      <td>{c.gender ? genderLabels[c.gender] : "—"}</td>
                       <td>{c.membership_card_number ?? "—"}</td>
                       <td>{datetime(c.created_at)}</td>
                     </tr>
@@ -223,14 +243,33 @@ export default async function CustomersPage({
             }
             closeHref={customerSearchHref(filters, { selected: "" })}
             editForm={
-              editResult.data && !editResult.error ? (
+              detail && profile.role === "admin" ? (
                 <CustomerForm
-                  customer={editResult.data}
+                  customer={detail.customer}
                   stores={writableStores}
                 />
               ) : undefined
             }
+            detail={detail}
+            today={new Intl.DateTimeFormat("sv-SE", {
+              timeZone: "Asia/Tokyo",
+            }).format(new Date())}
+            documentPage={documentPage}
+            previousDocumentHref={
+              customerSearchHref(filters) + `&documentPage=${documentPage - 1}`
+            }
+            nextDocumentHref={
+              customerSearchHref(filters) + `&documentPage=${documentPage + 1}`
+            }
+            historyPage={historyPage}
+            previousHistoryHref={
+              customerSearchHref(filters) + `&historyPage=${historyPage - 1}`
+            }
+            nextHistoryHref={
+              customerSearchHref(filters) + `&historyPage=${historyPage + 1}`
+            }
             relatedHref={
+              profile.role === "admin" &&
               storeAllowed(session, selected.store_id)
                 ? `/customers/${selected.id}`
                 : undefined

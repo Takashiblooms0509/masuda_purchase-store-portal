@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { businessSession, validId } from "@/lib/business/access";
 import { PageTitle, Empty, Pagination } from "@/components/business-ui";
 import { CustomerForm, CustomerDocumentForm } from "../forms";
@@ -15,6 +15,7 @@ export default async function CustomerPage({
 }) {
   const id = validId((await params).id);
   const { supabase, stores, profile } = await businessSession();
+  if (profile.role !== "admin") redirect(`/customers?selected=${id}`);
   const page = Math.max(
     1,
     Math.min(10000, Math.trunc(Number((await searchParams).page) || 1)),
