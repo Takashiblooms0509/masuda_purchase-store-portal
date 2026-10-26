@@ -39,12 +39,13 @@ try:
         if docker('exec',name,'pg_isready','-U','postgres').returncode==0: break
         time.sleep(.1)
     sql("create role anon nologin;create role authenticated nologin;create schema auth;grant usage on schema auth to anon,authenticated;create table auth.users(id uuid primary key,email text);create function auth.uid()returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid;$$;")
-    for f in ['202610010001_phase1_auth_stores.sql','202610010002_phase2_business.sql','20261026040515_category_master_atomic_csv.sql']:
+    for f in ['202610010001_phase1_auth_stores.sql','202610010002_phase2_business.sql','20261026040515_category_master_atomic_csv.sql','20261026081626_category_two_levels.sql']:
         sql((ROOT/'supabase/migrations'/f).read_text())
     sql(f"insert into auth.users values('{uid}','test@example.test');update public.profiles set role='admin',is_active=true where id='{uid}';")
     race(f"update public.product_categories set is_active=false where id='{a}';", f"insert into public.product_categories(parent_category_id,category_name)values('{a}','child');", 'category_active_child')
     race("insert into public.product_categories(category_name)values('same');", "insert into public.product_categories(category_name)values('same');", 'category_sibling_name_unique')
     race(f"update public.product_categories set parent_category_id='{b}' where id='{a}';", f"update public.product_categories set parent_category_id='{a}' where id='{b}';", 'Category cycle')
+    race(f"update public.product_categories set parent_category_id='{b}' where id='{a}';", f"insert into public.product_categories(parent_category_id,category_name)values('{a}','grandchild');", 'category_max_two_levels')
     sql('truncate public.product_categories cascade;'+f"insert into public.product_categories(id,category_name)values('{a}','A');")
     revision=sql(f"select updated_at::text from public.product_categories where id='{a}';").stdout.strip()
     row={'id':a,'new_key':None,'parent_id':None,'parent_new_key':None,'category_name':'A','display_order':1,'is_active':True,'updated_at':revision}

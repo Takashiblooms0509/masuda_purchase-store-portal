@@ -153,6 +153,21 @@ describe("category projected graph preview", () => {
       ).errors,
     ).toEqual([]);
   });
+  it("rejects third-level proposals before writes", () => {
+    const preview = previewCategories(
+      [
+        row(),
+        row({ new_key: "child", parent_new_key: "root", category_name: "子" }),
+        row({
+          new_key: "grandchild",
+          parent_new_key: "child",
+          category_name: "孫",
+        }),
+      ],
+      [],
+    );
+    expect(preview.errors.join()).toContain("3階層");
+  });
   it("detects legacy inconsistencies without changing input", () => {
     const before = [category("重複"), { ...category("重複"), id: id(2) }];
     const serialized = JSON.stringify(before);
