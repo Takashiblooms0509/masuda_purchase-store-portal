@@ -17,6 +17,7 @@ const { admin, from, query, revalidate } = vi.hoisted(() => {
   return { admin: vi.fn(), from: vi.fn(), query, revalidate: vi.fn() };
 });
 vi.mock("@/lib/auth/session", () => ({ requireAdmin: admin }));
+vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: revalidate }));
 vi.mock("@/lib/business/access", () => ({ saveError: () => "保存エラー" }));
 import { saveCategory } from "@/app/(portal)/categories/actions";

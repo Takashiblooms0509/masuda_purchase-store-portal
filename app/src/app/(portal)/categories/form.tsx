@@ -45,6 +45,15 @@ export function CategoryRow({
     { message: "" },
   );
   const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
+  const [sourceRevision, setSourceRevision] = useState(category?.updated_at);
+  // Refresh clean rows after CSV/other saves. Preserve dirty drafts with the old revision
+  // so a later save conflicts rather than silently overwriting the newer record.
+  if (category && sourceRevision !== category.updated_at && !dirty) {
+    setSourceRevision(category.updated_at);
+    setDraft(fields(category));
+    setSaved(fields(category));
+    setRevision(category.updated_at);
+  }
   const label = category?.category_name ?? "新規カテゴリ";
   const parents = categoryParents(categories, category?.id);
   const hasChildren =
@@ -121,7 +130,7 @@ export function CategoryRow({
           />
           {draft.is_active ? "有効" : "無効"}
         </label>
-        {hasChildren && <small>子カテゴリは連動しません</small>}
+        {hasChildren && <small>有効な子が残る間は無効化できません</small>}
       </td>
       <td>
         <form

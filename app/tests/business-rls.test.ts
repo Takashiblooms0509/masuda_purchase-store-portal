@@ -99,6 +99,7 @@ describe("Phase2 business tables / actual PostgreSQL RLS", () => {
         "utf8",
       ),
     );
+    await db.exec(readFileSync(new URL("../../supabase/migrations/20261026040515_category_master_atomic_csv.sql", import.meta.url), "utf8"));
     await db.query(
       "insert into public.stores(id,code,name)values($1,'A','店舗A'),($2,'B','店舗B')",
       [storeA, storeB],
@@ -391,8 +392,10 @@ describe("Phase2 business tables / actual PostgreSQL RLS", () => {
     await asUser(admin);
     const child = (await db.query<{ id: string }>("insert into public.product_categories(parent_category_id,category_name)values($1,'有効な子') returning id", [category])).rows[0].id;
     await db.query("update public.purchase_items set product_category_id=$1 where id=$2", [category, itemA]);
+    await expect(db.query("update public.product_categories set is_active=false where id=$1", [category])).rejects.toThrow(/category_active_child/);
+    await db.query("update public.product_categories set is_active=false where id=$1", [child]);
     await db.query("update public.product_categories set is_active=false where id=$1", [category]);
-    expect((await db.query("select is_active from public.product_categories where id=$1", [child])).rows).toEqual([{ is_active: true }]);
+    expect((await db.query("select is_active from public.product_categories where id=$1", [child])).rows).toEqual([{ is_active: false }]);
     expect((await db.query("select c.is_active,i.product_category_id from public.purchase_items i join public.product_categories c on c.id=i.product_category_id where i.id=$1", [itemA])).rows).toEqual([{ is_active: false, product_category_id: category }]);
     await expect(db.query("delete from public.product_categories where id=$1", [category])).rejects.toThrow(/permission denied/);
     await asUser(staffA);

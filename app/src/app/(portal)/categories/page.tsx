@@ -1,17 +1,12 @@
 import { requireProfile } from "@/lib/auth/session";
 import { PageTitle } from "@/components/business-ui";
 import { CategoryRow } from "./form";
+import { CategoryCsvPanel } from "./csv-panel";
+import { readCategories } from "@/lib/categories/read";
 import { categoryOrder, categoryPath } from "@/lib/categories/tree";
 export default async function CategoriesPage() {
   const { supabase, profile } = await requireProfile();
-  const { data, error } = await supabase
-    .from("product_categories")
-    .select("*")
-    .order("display_order")
-    .order("category_name")
-    .order("id");
-  if (error) throw new Error("カテゴリ一覧を取得できません。");
-  const categories = data ?? [];
+  const categories = await readCategories(supabase);
   const admin = profile.role === "admin";
   return (
     <>
@@ -27,7 +22,7 @@ export default async function CategoriesPage() {
           {admin
             ? "編集後、行ごとに「保存」してください。画面を離れると未保存の変更は失われます。"
             : "閲覧専用です。変更は管理者に依頼してください。"}{" "}
-          横にスクロールして全項目を確認できます。使用済みカテゴリは削除せず無効にして履歴を残します。親の無効化は子には連動しません。
+          横にスクロールして全項目を確認できます。使用済みカテゴリは削除せず無効にして履歴を残します。有効な子が残る親は無効化できません。同じ親の下の同名は登録できません。
         </p>
         <div
           className="table-scroll"
@@ -98,6 +93,7 @@ export default async function CategoriesPage() {
           </table>
         </div>
       </section>
+      {admin && <CategoryCsvPanel key={profile.id} />}
     </>
   );
 }
