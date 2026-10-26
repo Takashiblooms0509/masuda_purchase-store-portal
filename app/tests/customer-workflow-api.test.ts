@@ -90,23 +90,26 @@ describe("customer CSV server boundary", () => {
     expect(r.message).not.toContain("secret");
   });
   it("uses Japanese template/store codes and does not return candidate private data", async () => {
-    rpc.mockResolvedValue({
+    const select = vi.fn().mockResolvedValue({
       data: [
         {
           id: id(20),
           name: "候補",
           birth_date: "1990-01-01",
           identification_number: "NEVER",
+          address: "NEVER-ADDRESS",
         },
       ],
       error: null,
     });
+    rpc.mockReturnValue({ select });
     const f = new FormData();
     f.set(
       "file",
       new File([customerCsvTemplate() + "A,架空,,,,,,,,,,,"], "test.csv"),
     );
     const r = await previewCustomerImport({ message: "" }, f);
+    expect(select).toHaveBeenCalledWith("id,name");
     expect(r.rows?.[0].store_id).toBe(id(10));
     expect(r.rows?.[0].candidates).toEqual([{ id: id(20), name: "候補" }]);
     expect(JSON.stringify(r)).not.toContain("NEVER");
@@ -167,7 +170,9 @@ it("legacy customer forms do not erase newly added memo or gender when fields ar
 });
 
 it("shows within-file matching candidates before attempting an atomic insert", async () => {
-  rpc.mockResolvedValue({ data: [], error: null });
+  rpc.mockReturnValue({
+    select: vi.fn().mockResolvedValue({ data: [], error: null }),
+  });
   const f = new FormData();
   f.set(
     "file",

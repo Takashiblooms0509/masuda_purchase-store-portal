@@ -32,12 +32,10 @@ it("preserves hidden legacy My Number values on unrelated admin edits without re
   const update = vi.fn();
   const read = {
     eq: vi.fn().mockReturnThis(),
-    single: vi
-      .fn()
-      .mockResolvedValue({
-        data: { identification_type: "マイナンバーカード" },
-        error: null,
-      }),
+    single: vi.fn().mockResolvedValue({
+      data: { identification_type: "マイナンバーカード" },
+      error: null,
+    }),
   };
   const write = {
     eq: vi.fn().mockReturnThis(),
@@ -82,4 +80,42 @@ it("rejects direct-form My Number number before any database call", async () => 
   expect(result.success).not.toBe(true);
   expect(from).not.toHaveBeenCalled();
   expect(result.message).not.toContain("DEMO-NOT-VALID");
+});
+
+it("projects only required candidate fields and strips unused identity/address values", async () => {
+  const select = vi
+    .fn()
+    .mockResolvedValue({
+      data: [
+        {
+          id: "candidate",
+          name: "架空候補",
+          birth_date: null,
+          phone: null,
+          membership_card_number: null,
+          identification_number: "NEVER-IDENTITY",
+          address: "NEVER-ADDRESS",
+        },
+      ],
+      error: null,
+    });
+  const rpc = vi.fn().mockReturnValue({ select });
+  session.mockResolvedValue({ profile: { role: "staff" }, supabase: { rpc } });
+  const form = new FormData();
+  form.set("store_id", "00000000-0000-4000-8000-000000000010");
+  form.set("name", "架空");
+  const result = await saveCustomer({ message: "" }, form);
+  expect(select).toHaveBeenCalledWith(
+    "id,name,birth_date,phone,membership_card_number",
+  );
+  expect(result.candidates).toEqual([
+    {
+      id: "candidate",
+      name: "架空候補",
+      birth_date: null,
+      phone: null,
+      membership_card_number: null,
+    },
+  ]);
+  expect(JSON.stringify(result)).not.toContain("NEVER");
 });

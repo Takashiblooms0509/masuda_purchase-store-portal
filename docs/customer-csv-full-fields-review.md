@@ -17,6 +17,8 @@ Existing private customer_detail projection returns NULL for identification_numb
 
 Base table SELECT grants/RLS remain unchanged. Thus existing authorized direct table access is NOT revoked by this patch; the projection is a portal retrieval safeguard, not column-level encryption or a universal database read prohibition. No actual legacy identity values were inspected. Any separate remediation/access revocation needs its own review. Image guidance says My Number card front only; no image content detection, deletion or OCR is added.
 
+Candidate retrieval is explicitly projected at every portal call: direct entry requests only id,name,birth_date,phone,membership_card_number; CSV preview requests only id,name. Regression tests assert both PostgREST projections and response allowlists, excluding unused identity/address values. SQL candidate RPC definitions and database rights remain unchanged.
+
 ## Migration/security/compatibility
 
 20261026092625_customer_csv_full_fields.sql has no new columns, no data rewrite, no RLS/grant widening. A SECURITY INVOKER trigger validates new identity values on direct/service writes. Existing private.customer_detail remains SECURITY DEFINER, fixed empty search_path and existing gate/ACL; only the number expression changes. New public.insert_customer_csv_v2 is SECURITY INVOKER, empty search_path, PUBLIC/anon revoked, authenticated granted. It uses existing RLS, active profile gate, own-store check, write advisory lock, receipt digest, exact candidate recheck, and atomic insert-only transaction. All 13 columns have explicit mapping and validation. No update/upsert branch exists.
@@ -25,7 +27,7 @@ Legacy insert_customer_csv and its response/ACL remain unchanged; legacy/new wri
 
 ## Validation
 
-npm run check: typecheck, lint, 257 tests in 23 files, production build PASS.
+npm run check: typecheck, lint, 258 tests in 23 files, production build PASS.
 Actual React components with production-emitted CSS: 1440/390/320 widths, centered add/CSV dialogs, right detail, all form fields, type choices/disabled number, CSV preview/duplicate selection, Escape/focus restoration PASS. Uses synthetic adapters, not real Supabase authentication.
 PGlite full migration chain: direct identity guards, legacy preservation/projection, v2 fields, atomic rollback, idempotent digest/replay, field/type/date rejection, staff other-store denial, inactive and anon denial, exact legacy RPC definition compatibility, v2 invoker/ACL.
 Isolated PostgreSQL 17 concurrency: original six checks plus v2 identical retry, v2 duplicate race, legacy/v2 writer race PASS. No production users/data/credentials created.

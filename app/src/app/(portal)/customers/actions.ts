@@ -44,10 +44,12 @@ export async function saveCustomer(
       const reviewKey = createHash("sha256")
         .update(JSON.stringify(parsed.data))
         .digest("hex");
-      const { data: candidates, error } = await session.supabase.rpc(
-        "find_customer_candidates",
-        { p_store_id: store_id, p_customer: values },
-      );
+      const { data: candidates, error } = await session.supabase
+        .rpc("find_customer_candidates", {
+          p_store_id: store_id,
+          p_customer: values,
+        })
+        .select("id,name,birth_date,phone,membership_card_number");
       if (error)
         return {
           message:

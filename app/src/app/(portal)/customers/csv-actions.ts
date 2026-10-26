@@ -85,10 +85,12 @@ export async function previewCustomerImport(
         message: `${row.line}行目：${previous}行目と氏名・電話・カード番号のいずれかが一致します。同一CSV内の重複候補を整理して再プレビューしてください。`,
       };
     duplicateKeys.forEach((key) => incoming.set(key, row.line));
-    const { data, error } = await session.supabase.rpc(
-      "find_customer_candidates",
-      { p_store_id: target, p_customer: { ...row.value } },
-    );
+    const { data, error } = await session.supabase
+      .rpc("find_customer_candidates", {
+        p_store_id: target,
+        p_customer: { ...row.value },
+      })
+      .select("id,name");
     if (error)
       return { message: "候補を確認できません。再プレビューしてください。" };
     rows.push({
