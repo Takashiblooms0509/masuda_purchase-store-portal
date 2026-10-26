@@ -5,12 +5,14 @@ import { revalidatePath } from "next/cache";
 import { businessSession, storeAllowed } from "@/lib/business/access";
 import {
   CUSTOMER_CSV_BYTES,
-  customerCsvRowSchema,
+  customerCsvFields,
+  type CustomerCsvRow,
   decodeCustomerCsv,
   previewCustomerCsv,
-} from "@/lib/customers/csv";
+} from "@/lib/customers/csv-v2";
+import { identificationNumberAllowed } from "@/lib/customers/identification";
 import type { ActionState } from "@/lib/forms";
-export type ImportCustomerRow = {
+export type ImportCustomerRow = CustomerCsvRow & {
   line: number;
   store_id: string;
   store_name: string;
@@ -59,7 +61,7 @@ export async function previewCustomerImport(
     );
     if (matches.length !== 1)
       return {
-        message: `${row.line}行目：登録店舗コードが存在しないか、登録権限がありません。`,
+        message: `${row.line}行目：登録店舗のコードが存在しないか、登録権限がありません。`,
       };
     // Derive staff target from current profile, never from a submitted UUID.
     const target =
@@ -105,13 +107,16 @@ export async function previewCustomerImport(
     success: true,
   };
 }
-const rowSchema = customerCsvRowSchema
+const rowSchema = customerCsvFields
   .omit({ store_code: true })
   .extend({
     store_id: z.uuid(),
     approved_duplicate_ids: z.array(z.uuid()).max(20),
   })
-  .strict();
+  .strict()
+  .refine((r) =>
+    identificationNumberAllowed(r.identification_type, r.identification_number),
+  );
 export async function confirmCustomerImport(
   _state: ActionState,
   form: FormData,
@@ -144,10 +149,13 @@ export async function confirmCustomerImport(
   )
     return { message: "登録先店舗への権限がありません。" };
   try {
-    const { data, error } = await session.supabase.rpc("insert_customer_csv", {
-      p_request: request.data,
-      p_rows: rows,
-    });
+    const { data, error } = await session.supabase.rpc(
+      "insert_customer_csv_v2",
+      {
+        p_request: request.data,
+        p_rows: rows,
+      },
+    );
     if (error)
       return {
         message:

@@ -1,3 +1,4 @@
+import { customerDetailSchema } from "@/lib/customers/detail";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { businessSession, validId } from "@/lib/business/access";
@@ -21,7 +22,7 @@ export default async function CustomerPage({
     Math.min(10000, Math.trunc(Number((await searchParams).page) || 1)),
   );
   const [customerResult, documentsResult, historyResult] = await Promise.all([
-    supabase.from("customers").select("*").eq("id", id).maybeSingle(),
+    supabase.rpc("get_customer_detail", { p_customer: id }),
     supabase
       .from("customer_documents")
       .select("*")
@@ -38,7 +39,9 @@ export default async function CustomerPage({
   if (customerResult.error || documentsResult.error || historyResult.error)
     throw new Error("顧客情報を取得できません。");
   if (!customerResult.data) notFound();
-  const customer = customerResult.data;
+  const parsed = customerDetailSchema.safeParse(customerResult.data);
+  if (!parsed.success) throw new Error("顧客情報を取得できません。");
+  const customer = parsed.data.customer;
   return (
     <>
       <PageTitle
@@ -84,7 +87,7 @@ export default async function CustomerPage({
       <section className="card">
         <h2>本人確認書類</h2>
         <p className="muted">
-          本人確認書類画像は非公開で保存します。顧客ごとに複数画像を登録できます。
+          本人確認書類画像は非公開で保存します。顧客ごとに複数画像を登録できます。マイナンバーカードは表面のみとし、個人番号が記載された裏面はアップロードしないでください。
         </p>
         {!documentsResult.data?.length ? (
           <Empty>書類情報はありません。</Empty>

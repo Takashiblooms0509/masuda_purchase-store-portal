@@ -1,4 +1,5 @@
 "use server";
+import { isMyNumberType } from "@/lib/customers/identification";
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -80,11 +81,36 @@ export async function saveCustomer(
       if (save) return { message: saveError(save.code) };
       customerId = data.id;
     } else {
-      const { error } = await session.supabase
+      // Fetch type only: never fetch a legacy national number to preserve it.
+      const current = await session.supabase
         .from("customers")
-        .update(values)
+        .select("identification_type")
         .eq("id", id)
         .eq("store_id", store_id)
+        .single();
+      if (current.error) return { message: "顧客情報を確認できません。" };
+      if (
+        isMyNumberType(current.data.identification_type) &&
+        current.data.identification_type !== values.identification_type
+      )
+        return {
+          message:
+            "この書類種類の変更は個別確認が必要です。既存情報は変更していません。",
+        };
+      const { identification_number, ...withoutNumber } = values;
+      const update = isMyNumberType(values.identification_type)
+        ? withoutNumber
+        : { ...withoutNumber, identification_number };
+      const { error } = await session.supabase
+        .from("customers")
+        .update(update)
+        .eq("id", id)
+        .eq("store_id", store_id)
+        .filter(
+          "identification_type",
+          current.data.identification_type === null ? "is" : "eq",
+          current.data.identification_type,
+        )
         .select("id")
         .single();
       if (error) return { message: saveError(error.code) };

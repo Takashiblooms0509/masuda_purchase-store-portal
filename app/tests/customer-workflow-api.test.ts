@@ -1,3 +1,4 @@
+import { customerCsvTemplate } from "@/lib/customers/csv-v2";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 const { session, rpc, storage, privileged, apiSession } = vi.hoisted(() => ({
   session: vi.fn(),
@@ -25,6 +26,14 @@ const row = {
   store_id: id(10),
   name: "架空",
   name_kana: "",
+  birth_date: "",
+  gender: "",
+  occupation: "",
+  postal_code: "",
+  address: "",
+  dm_allowed: "",
+  identification_type: "",
+  identification_number: "",
   phone: "",
   membership_card_number: "",
   approved_duplicate_ids: [],
@@ -68,7 +77,7 @@ describe("customer CSV server boundary", () => {
     expect(
       (await confirmCustomerImport({ message: "" }, form([row]))).success,
     ).toBe(true);
-    expect(rpc).toHaveBeenCalledWith("insert_customer_csv", {
+    expect(rpc).toHaveBeenCalledWith("insert_customer_csv_v2", {
       p_request: id(90),
       p_rows: [row],
     });
@@ -95,12 +104,7 @@ describe("customer CSV server boundary", () => {
     const f = new FormData();
     f.set(
       "file",
-      new File(
-        [
-          "登録店舗コード,氏名,フリガナ,電話番号,リピーターズカード番号\nA,架空,,,",
-        ],
-        "test.csv",
-      ),
+      new File([customerCsvTemplate() + "A,架空,,,,,,,,,,,"], "test.csv"),
     );
     const r = await previewCustomerImport({ message: "" }, f);
     expect(r.rows?.[0].store_id).toBe(id(10));
@@ -169,7 +173,8 @@ it("shows within-file matching candidates before attempting an atomic insert", a
     "file",
     new File(
       [
-        "登録店舗コード,氏名,フリガナ,電話番号,リピーターズカード番号\nA,架空,,000-123,\nA,別人,,000123,",
+        customerCsvTemplate() +
+          "A,架空,,,,,000-123,,,,,,\nA,別人,,,,,000123,,,,,,",
       ],
       "test.csv",
     ),
@@ -178,7 +183,23 @@ it("shows within-file matching candidates before attempting an atomic insert", a
   expect(result.message).toContain("同一CSV内の重複候補");
   expect(result.rows).toBeUndefined();
   expect(rpc).not.toHaveBeenCalledWith(
-    "insert_customer_csv",
+    "insert_customer_csv_v2",
     expect.anything(),
   );
+});
+
+it("rejects national-number payloads without calling the import RPC", async () => {
+  const result = await confirmCustomerImport(
+    { message: "" },
+    form([
+      {
+        ...row,
+        identification_type: "マイナンバーカード",
+        identification_number: "DEMO-NOT-VALID",
+      },
+    ]),
+  );
+  expect(result.success).not.toBe(true);
+  expect(rpc).not.toHaveBeenCalled();
+  expect(result.message).not.toContain("DEMO-NOT-VALID");
 });

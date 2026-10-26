@@ -1,5 +1,5 @@
 import { businessSession } from "@/lib/business/access";
-import { customerCsvTemplate } from "@/lib/customers/csv";
+import { customerCsvTemplate } from "@/lib/customers/csv-v2";
 export async function GET() {
   await businessSession();
   return new Response(customerCsvTemplate(), {

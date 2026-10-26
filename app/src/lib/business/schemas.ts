@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { identificationNumberAllowed } from "@/lib/customers/identification";
 const text = (max = 500) => z.string().trim().max(max).nullable();
 const date = z.iso.date().nullable();
 const uuid = z.uuid().nullable();
@@ -9,26 +10,30 @@ const money = z
   .max(999999999999.99)
   .multipleOf(0.01)
   .nullable();
-export const customerSchema = z.object({
-  id: uuid,
-  store_id: z.uuid(),
-  name: z.string().trim().min(1).max(100),
-  name_kana: text(100),
-  birth_date: date,
-  occupation: text(100),
-  postal_code: text(20),
-  address: text(500),
-  phone: text(50),
-  dm_allowed: z.boolean().nullable(),
-  membership_card_number: text(100),
-  identification_type: text(100),
-  identification_number: text(100),
-  gender: z
-    .enum(["female", "male", "other", "unspecified"])
-    .nullable()
-    .optional(),
-  memo: text(1000).optional(),
-});
+export const customerSchema = z
+  .object({
+    id: uuid,
+    store_id: z.uuid(),
+    name: z.string().trim().min(1).max(100),
+    name_kana: text(100),
+    birth_date: date,
+    occupation: text(100),
+    postal_code: text(20),
+    address: text(500),
+    phone: text(50),
+    dm_allowed: z.boolean().nullable(),
+    membership_card_number: text(100),
+    identification_type: text(100),
+    identification_number: text(100),
+    gender: z
+      .enum(["female", "male", "other", "unspecified"])
+      .nullable()
+      .optional(),
+    memo: text(1000).optional(),
+  })
+  .refine((r) =>
+    identificationNumberAllowed(r.identification_type, r.identification_number),
+  );
 export const itemSchema = z.object({
   purchase_status: z.enum(["pending", "completed", "not_completed"]).optional(),
   id: uuid,

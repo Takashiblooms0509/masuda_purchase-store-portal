@@ -6,6 +6,7 @@ const id = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 let db: PGlite;
 let legacyDefinitions: unknown[];
+let legacyCsvDefinition: unknown;
 const legacyDefinitionSql =
   "select proname,pg_get_functiondef(oid) definition,proacl::text acl from pg_proc where oid in ('private.customer_directory(text,text,text,uuid,date,date,uuid,integer)'::regprocedure,'public.get_customer_directory(text,text,text,uuid,date,date,uuid,integer)'::regprocedure) order by proname";
 async function actor(n: number, role = "authenticated") {
@@ -43,6 +44,12 @@ beforeAll(async () => {
     .sort()) {
     if (f === "20261026062254_customer_review_workflow.sql")
       legacyDefinitions = (await db.query(legacyDefinitionSql)).rows;
+    if (f === "20261026092625_customer_csv_full_fields.sql")
+      legacyCsvDefinition = (
+        await db.query(
+          "select pg_get_functiondef('public.insert_customer_csv(uuid,jsonb)'::regprocedure) definition",
+        )
+      ).rows;
     await db.exec(readFileSync(new URL(f, root), "utf8"));
   }
   await db.exec(
@@ -389,4 +396,153 @@ it("versioned directory has exact authenticated-only ACL, fixed path and current
   await denied("select get_customer_directory_v2()");
   await actor(2, "anon");
   await denied("select get_customer_directory_v2()");
+});
+
+const fullRow = (name = "FULL", store = 10) => ({
+  ...row(name, store),
+  birth_date: "2000-02-29",
+  gender: "unspecified",
+  occupation: "DEMO",
+  postal_code: "000-0000",
+  address: "FAKE ADDRESS",
+  dm_allowed: "false",
+  identification_type: "運転免許証",
+  identification_number: "DEMO-NOT-VALID",
+});
+const runFull = (rows: unknown, request = 91) =>
+  db.query<{ n: number }>("select insert_customer_csv_v2($1,$2) n", [
+    id(request),
+    JSON.stringify(rows),
+  ]);
+it("imports all business fields atomically, preserves zeros and replays only identical payload", async () => {
+  await actor(2);
+  const input = { ...fullRow(), membership_card_number: "000001" };
+  expect((await runFull([input])).rows[0].n).toBe(1);
+  expect((await runFull([input])).rows[0].n).toBe(1);
+  const saved = (
+    await db.query(
+      "select birth_date::text,gender,occupation,postal_code,address,dm_allowed,identification_type,identification_number,membership_card_number from customers where name='FULL'",
+    )
+  ).rows[0];
+  expect(saved).toMatchObject({
+    birth_date: "2000-02-29",
+    gender: "unspecified",
+    dm_allowed: false,
+    membership_card_number: "000001",
+    identification_number: "DEMO-NOT-VALID",
+  });
+  await denied(
+    "select insert_customer_csv_v2($1,$2)",
+    [id(91), JSON.stringify([{ ...input, address: "CHANGED" }])],
+    "22023",
+  );
+});
+it("validates new fields and rejects mixed invalid batches with no partial insertion", async () => {
+  await actor(2);
+  for (const change of [
+    { birth_date: "2000/02/29" },
+    { birth_date: "2025-02-29" },
+    { gender: "男性" },
+    { dm_allowed: "可" },
+    { identification_type: "未知" },
+    { identification_type: "マイナンバーカード" },
+    { id: id(20) },
+    { address: "=DEMO" },
+  ]) {
+    await denied(
+      "select insert_customer_csv_v2($1,$2)",
+      [
+        id(92),
+        JSON.stringify([fullRow("FIRST"), { ...fullRow("SECOND"), ...change }]),
+      ],
+      "22023",
+    );
+    expect(
+      (
+        await db.query(
+          "select count(*)::int n from customers where name='FIRST'",
+        )
+      ).rows[0],
+    ).toMatchObject({ n: 0 });
+  }
+});
+it("keeps new RPC staff store boundary and inactive/anonymous rejection", async () => {
+  await actor(2);
+  await denied("select insert_customer_csv_v2($1,$2)", [
+    id(92),
+    JSON.stringify([fullRow("OTHER", 11)]),
+  ]);
+  await actor(3);
+  await denied("select insert_customer_csv_v2($1,$2)", [
+    id(92),
+    JSON.stringify([fullRow()]),
+  ]);
+  await actor(2, "anon");
+  await denied("select insert_customer_csv_v2($1,$2)", [
+    id(92),
+    JSON.stringify([fullRow()]),
+  ]);
+});
+it("enforces identification guard for direct writes without changing unrelated legacy values", async () => {
+  await actor(1);
+  await denied(
+    "insert into customers(store_id,name,identification_type,identification_number) values($1,'REJECT','マイナンバーカード','DEMO-NOT-VALID')",
+    [id(10)],
+    "22023",
+  );
+  await db.exec(
+    "reset role;alter table customers disable trigger customer_identification_guard",
+  );
+  await db.query(
+    "update customers set identification_type='マイナンバーカード',identification_number='LEGACY-SYNTHETIC' where id=$1",
+    [id(20)],
+  );
+  await db.exec(
+    "alter table customers enable trigger customer_identification_guard",
+  );
+  await actor(1);
+  await db.query("update customers set occupation='UNRELATED' where id=$1", [
+    id(20),
+  ]);
+  const result = await db.query<{
+    payload: { customer: { identification_number: null } };
+  }>("select get_customer_detail($1) payload", [id(20)]);
+  expect(result.rows[0].payload.customer.identification_number).toBeNull();
+  expect(JSON.stringify(result.rows)).not.toContain("LEGACY-SYNTHETIC");
+  await db.exec("reset role");
+  expect(
+    (
+      await db.query(
+        "select identification_number from customers where id=$1",
+        [id(20)],
+      )
+    ).rows[0],
+  ).toMatchObject({ identification_number: "LEGACY-SYNTHETIC" });
+  await actor(1);
+  await denied(
+    "update customers set identification_number='CHANGED' where id=$1",
+    [id(20)],
+    "22023",
+  );
+});
+
+it("keeps legacy CSV definition byte-identical and v2 invoker/ACL restricted", async () => {
+  await db.exec("reset role");
+  expect(
+    (
+      await db.query(
+        "select pg_get_functiondef('public.insert_customer_csv(uuid,jsonb)'::regprocedure) definition",
+      )
+    ).rows,
+  ).toEqual(legacyCsvDefinition);
+  const result = (
+    await db.query(
+      "select prosecdef,proconfig,has_function_privilege('anon',oid,'execute') anon,has_function_privilege('authenticated',oid,'execute') authenticated from pg_proc where oid='public.insert_customer_csv_v2(uuid,jsonb)'::regprocedure",
+    )
+  ).rows[0];
+  expect(result).toMatchObject({
+    prosecdef: false,
+    anon: false,
+    authenticated: true,
+  });
 });

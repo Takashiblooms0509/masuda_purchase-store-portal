@@ -7,6 +7,10 @@ import {
   type CustomerState,
 } from "./actions";
 import { Feedback, StoreField } from "@/components/business-ui";
+import {
+  IDENTIFICATION_TYPES,
+  isMyNumberType,
+} from "@/lib/customers/identification";
 import { documentTypes } from "@/lib/business/format";
 import type {
   Customer,
@@ -46,7 +50,15 @@ export function CustomerForm({
   formId?: string;
 }) {
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fields.map(({ key }) => [key, customer?.[key] ?? ""])),
+    Object.fromEntries(
+      fields.map(({ key }) => [
+        key,
+        key === "identification_number" &&
+        isMyNumberType(customer?.identification_type)
+          ? ""
+          : (customer?.[key] ?? ""),
+      ]),
+    ),
   );
   const [revealed, setRevealed] = useState(false);
   const [dm, setDm] = useState(
@@ -83,33 +95,78 @@ export function CustomerForm({
           <label key={key}>
             {label}
             {key === "name" && <span className="required"> 必須</span>}
-            <input
-              name={key}
-              type={
-                key === "identification_number"
-                  ? revealed
-                    ? "text"
-                    : "password"
-                  : (type ?? "text")
-              }
-              autoComplete={key === "identification_number" ? "off" : undefined}
-              maxLength={max}
-              required={key === "name"}
-              value={values[key]}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, [key]: e.target.value }))
-              }
-            />
-            {key === "identification_number" && (
-              <button
-                type="button"
-                className="secondary"
-                aria-pressed={revealed}
-                onClick={() => setRevealed(!revealed)}
+            {key === "identification_type" ? (
+              <select
+                name={key}
+                value={values[key]}
+                onChange={(e) => {
+                  setRevealed(false);
+                  setValues((v) => ({
+                    ...v,
+                    identification_type: e.target.value,
+                  }));
+                }}
               >
-                {revealed ? "番号を隠す" : "番号を表示"}
-              </button>
+                <option value="">未登録</option>
+                {values[key] &&
+                  !IDENTIFICATION_TYPES.some((t) => t === values[key]) && (
+                    <option value={values[key]}>
+                      既存の種類：{values[key]}（変更しなければ保持）
+                    </option>
+                  )}
+                {IDENTIFICATION_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                name={key}
+                type={
+                  key === "identification_number"
+                    ? revealed
+                      ? "text"
+                      : "password"
+                    : (type ?? "text")
+                }
+                autoComplete={
+                  key === "identification_number" ? "off" : undefined
+                }
+                maxLength={max}
+                required={key === "name"}
+                disabled={
+                  key === "identification_number" &&
+                  isMyNumberType(values.identification_type)
+                }
+                value={
+                  key === "identification_number" &&
+                  isMyNumberType(values.identification_type)
+                    ? ""
+                    : values[key]
+                }
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, [key]: e.target.value }))
+                }
+              />
             )}
+            {key === "identification_number" &&
+              isMyNumberType(values.identification_type) && (
+                <span className="muted small">
+                  個人番号は入力・保存しません。既存の保存値はこの画面で表示・削除しません。
+                </span>
+              )}
+            {key === "identification_number" &&
+              !isMyNumberType(values.identification_type) && (
+                <button
+                  type="button"
+                  className="secondary"
+                  aria-pressed={revealed}
+                  onClick={() => setRevealed(!revealed)}
+                >
+                  {revealed ? "番号を隠す" : "番号を表示"}
+                </button>
+              )}
           </label>
         ))}
         <label>
