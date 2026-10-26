@@ -387,6 +387,26 @@ describe("Phase2 business tables / actual PostgreSQL RLS", () => {
       ).rows,
     ).toEqual([{ category_level: 2 }]);
   });
+  it("カテゴリ無効化は過去明細・子を維持し、staff更新と削除を拒否", async () => {
+    await asUser(admin);
+    const child = (await db.query<{ id: string }>("insert into public.product_categories(parent_category_id,category_name)values($1,'有効な子') returning id", [category])).rows[0].id;
+    await db.query("update public.purchase_items set product_category_id=$1 where id=$2", [category, itemA]);
+    await db.query("update public.product_categories set is_active=false where id=$1", [category]);
+    expect((await db.query("select is_active from public.product_categories where id=$1", [child])).rows).toEqual([{ is_active: true }]);
+    expect((await db.query("select c.is_active,i.product_category_id from public.purchase_items i join public.product_categories c on c.id=i.product_category_id where i.id=$1", [itemA])).rows).toEqual([{ is_active: false, product_category_id: category }]);
+    await expect(db.query("delete from public.product_categories where id=$1", [category])).rejects.toThrow(/permission denied/);
+    await asUser(staffA);
+    expect((await db.query("update public.product_categories set is_active=true where id=$1 returning id", [category])).rows).toEqual([]);
+    expect((await db.query("select is_active from public.product_categories where id=$1", [category])).rows).toEqual([{ is_active: false }]);
+  });
+  it("カテゴリ保存は古い更新日時で後続更新を上書きしない", async () => {
+    await asUser(admin);
+    const old = (await db.query<{ updated_at: string }>("select updated_at::text from public.product_categories where id=$1", [category])).rows[0].updated_at;
+    const changed = await db.query("update public.product_categories set category_name='先の編集' where id=$1 and updated_at=$2 returning id", [category, old]);
+    expect(changed.rows).toHaveLength(1);
+    const stale = await db.query("update public.product_categories set category_name='古い編集' where id=$1 and updated_at=$2 returning id", [category, old]);
+    expect(stale.rows).toEqual([]);
+  });
   it("カテゴリ循環禁止と親変更時の子孫level更新", async () => {
     const child = id(71),
       grandchild = id(72),
