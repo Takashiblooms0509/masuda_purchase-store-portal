@@ -117,6 +117,8 @@ describe("Phase4 actual SQL, Storage RLS and processing controls", () => {
       "202610010002_phase2_business.sql",
       "202610010003_phase3_reporting.sql",
       "202610010004_phase4_image_reading.sql",
+      "20261026024940_home_item_outcomes_reporting.sql",
+      "20261026033404_customer_directory_admin_updates.sql",
     ])
       await db.exec(
         readFileSync(
@@ -495,6 +497,10 @@ describe("Phase4 actual SQL, Storage RLS and processing controls", () => {
     );
   });
   it("keeps AI and human drafts separate and never creates business records", async () => {
+    await db.exec("reset role");
+    const beforeCustomers = (
+      await db.query("select * from public.customers order by id")
+    ).rows;
     await reviewed();
     await asUser(staffA);
     const draft = initialReview(readingFixture);
@@ -516,6 +522,11 @@ describe("Phase4 actual SQL, Storage RLS and processing controls", () => {
     ).rows[0];
     expect(saved.ai_result.customer.name).toBe("検証顧客");
     expect(saved.reviewed_result.customer.name).toBe("人が修正");
+    await db.exec("reset role");
+    expect(
+      (await db.query("select * from public.customers order by id")).rows,
+    ).toEqual(beforeCustomers);
+    await asUser(staffA);
     expect(
       (await db.query("select * from public.purchase_transactions")).rows,
     ).toHaveLength(0);
@@ -638,5 +649,44 @@ describe("Phase4 actual SQL, Storage RLS and processing controls", () => {
         ]),
       "23514",
     );
+  });
+
+  describe("Customer directory does not widen existing image or import boundaries", () => {
+    it("cross-store directory selection grants no image metadata or Storage access", async () => {
+      const path = await upload("customer_document", true);
+      await asUser(staffA);
+      const { rows } = await db.query<{ value: { selected: { id: string } } }>(
+        "select public.get_customer_directory(p_selected:=$1) value",
+        [customerB],
+      );
+      expect(rows[0].value.selected.id).toBe(customerB);
+      expect(
+        (
+          await db.query(
+            "select * from public.customer_documents where id=$1",
+            [docB],
+          )
+        ).rows,
+      ).toHaveLength(0);
+      expect(
+        (await db.query("select * from storage.objects where name=$1", [path]))
+          .rows,
+      ).toHaveLength(0);
+      expect(
+        (
+          await db.query<{ allowed: boolean }>(
+            "select private.can_read_source_object($1) allowed",
+            [path],
+          )
+        ).rows[0].allowed,
+      ).toBe(false);
+      expect(
+        (
+          await db.query("select * from public.document_imports where id=$1", [
+            importB,
+          ])
+        ).rows,
+      ).toHaveLength(0);
+    });
   });
 });

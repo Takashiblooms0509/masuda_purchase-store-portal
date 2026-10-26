@@ -1,0 +1,2 @@
+-- Superseded by supabase/migrations/20261026033404_customer_directory_admin_updates.sql
+-- Review the formal migration; this file intentionally executes no SQL.
