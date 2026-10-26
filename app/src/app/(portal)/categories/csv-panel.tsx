@@ -7,7 +7,11 @@ import {
 } from "./actions";
 import { categoryCsv, type CsvPreview } from "@/lib/categories/csv";
 import { Feedback } from "@/components/business-ui";
-export function CategoryCsvPanel() {
+export function CategoryCsvPanel({
+  onPendingChange,
+}: {
+  onPendingChange?: (pending: boolean) => void;
+}) {
   const [preview, setPreview] = useState<CsvPreview | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [previewState, previewAction, previewPending] = useActionState<
@@ -17,9 +21,13 @@ export function CategoryCsvPanel() {
     async (previous, form) => {
       setPreview(null);
       setConfirmed(false);
-      const result = await previewCategoryImport(previous, form);
-      setPreview(result.preview ?? null);
-      return result;
+      try {
+        const result = await previewCategoryImport(previous, form);
+        setPreview(result.preview ?? null);
+        return result;
+      } finally {
+        onPendingChange?.(false);
+      }
     },
     { message: "" },
   );
@@ -28,25 +36,24 @@ export function CategoryCsvPanel() {
       previous: { message: string; success?: boolean },
       form: FormData,
     ) => {
-      const result = await confirmCategoryImport(previous, form);
-      // Re-preview after every attempt, including uncertain network results, before resubmission.
-      setPreview(null);
-      setConfirmed(false);
-      return result;
+      try {
+        return await confirmCategoryImport(previous, form);
+      } finally {
+        // Re-preview after every attempt, including uncertain network results.
+        setPreview(null);
+        setConfirmed(false);
+        onPendingChange?.(false);
+      }
     },
     { message: "" },
   );
   const pending = previewPending || savePending;
   return (
     <section className="card stack">
-      <h2>カテゴリCSV</h2>
       <p className="muted">
         CSVは管理者のみ利用できます。UTF-8（BOMあり／なし）、256KB・500行まで。未記載のカテゴリは変更しません。テーブルの未保存編集は出力や取込に含みません。
       </p>
       <div className="category-buttons">
-        <a href="/categories/export" className="button secondary">
-          保存済みカテゴリをCSV出力
-        </a>
         <a
           href={`data:text/csv;charset=utf-8,${encodeURIComponent(categoryCsv([]))}`}
           download="categories-template.csv"
@@ -75,6 +82,7 @@ export function CategoryCsvPanel() {
         onSubmit={(e) => {
           e.preventDefault();
           const data = new FormData(e.currentTarget);
+          onPendingChange?.(true);
           startTransition(() => previewAction(data));
         }}
       >
@@ -150,6 +158,7 @@ export function CategoryCsvPanel() {
               onSubmit={(e) => {
                 e.preventDefault();
                 const data = new FormData(e.currentTarget);
+                onPendingChange?.(true);
                 startTransition(() => saveAction(data));
               }}
             >

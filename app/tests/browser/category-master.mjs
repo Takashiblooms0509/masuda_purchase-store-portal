@@ -1,7 +1,7 @@
 // Actual React category component with synthetic in-memory server adapters; no live Auth/DB.
 import { createServer } from "vite";
 import { createRequire } from "node:module";
-import { mkdtemp, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, writeFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
@@ -11,9 +11,29 @@ const app = path.resolve(import.meta.dirname, "../.."),
   temp = await mkdtemp(path.join(tmpdir(), "category-master-")),
   out = path.join(app, "../docs/category-review-artifacts");
 await mkdir(out, { recursive: true });
+const builtMode = process.env.CATEGORY_BUILT_CSS === "1";
+let builtCss = "",
+  builtClasses = {};
+if (builtMode) {
+  const directory = path.join(app, ".next/static/chunks");
+  builtCss = (
+    await Promise.all(
+      (await readdir(directory))
+        .filter((f) => f.endsWith(".css"))
+        .map((f) => readFile(path.join(directory, f), "utf8")),
+    )
+  ).join("\n");
+  const prefix = builtCss.match(/\.([A-Za-z0-9]+)_csvDialog/)?.[1];
+  assert(prefix, "Run production build first; category CSV dialog CSS missing");
+  for (const m of builtCss.matchAll(
+    new RegExp("\\." + prefix + "_([A-Za-z0-9]+)", "g"),
+  ))
+    builtClasses[m[1]] = prefix + "_" + m[1];
+}
+
 await writeFile(
   path.join(temp, "actions.ts"),
-  `export async function saveCategory(prev,form){window.calls++;window.lastForm=Object.fromEntries(form);if(window.delay)await new Promise(r=>setTimeout(r,300));if(window.conflict)return {message:'他の更新がありました。再読み込みしてください。'};const values={category_name:form.get('category_name').trim(),parent_category_id:form.get('parent_category_id')||null,is_active:form.get('is_active')==='on',display_order:Number(form.get('display_order')),updated_at:new Date().toISOString()};const old=window.rows.find(c=>c.id===form.get('id'));if(old)Object.assign(old,values);else window.rows.push({...values,id:crypto.randomUUID(),created_at:values.updated_at,category_level:values.parent_category_id?2:1});return {success:true,message:'保存成功',updatedAt:values.updated_at};}export async function previewCategoryImport(){return {message:'架空プレビュー'};}export async function confirmCategoryImport(){return {message:'架空保存'};}`,
+  `import {parseCategoryCsv,previewCategories} from '${app}/src/lib/categories/csv';export async function saveCategory(prev,form){window.calls++;window.lastForm=Object.fromEntries(form);if(window.delay)await new Promise(r=>setTimeout(r,300));if(window.conflict)return {message:'他の更新がありました。再読み込みしてください。'};const values={category_name:form.get('category_name').trim(),parent_category_id:form.get('parent_category_id')||null,is_active:form.get('is_active')==='on',display_order:Number(form.get('display_order')),updated_at:new Date().toISOString()};const old=window.rows.find(c=>c.id===form.get('id'));if(old)Object.assign(old,values);else window.rows.push({...values,id:crypto.randomUUID(),created_at:values.updated_at,category_level:values.parent_category_id?2:1});return {success:true,message:'保存成功',updatedAt:values.updated_at};}export async function previewCategoryImport(prev,form){try{const preview=previewCategories(parseCategoryCsv(await form.get('file').text()),window.rows);return {message:'架空プレビュー',preview,success:!preview.errors.length};}catch(e){return {message:e.message};}}export async function confirmCategoryImport(){window.importCalls=(window.importCalls||0)+1;await new Promise(r=>setTimeout(r,300));return {message:'架空CSV保存成功',success:true};}`,
 );
 await writeFile(
   path.join(temp, "nav.ts"),
@@ -52,7 +72,14 @@ try {
       {
         name: "synthetic-actions",
         enforce: "pre",
+        resolveId(source) {
+          if (builtMode && source === "./master.module.css")
+            return "\0built-category-styles";
+        },
         load(id) {
+          if (id === "\0built-category-styles")
+            return "export default " + JSON.stringify(builtClasses);
+          if (builtMode && id.endsWith("/src/app/globals.css")) return builtCss;
           if (id.endsWith("/categories/actions.ts"))
             return `export * from '${temp}/actions.ts'`;
         },
@@ -221,7 +248,9 @@ try {
   await p.getByLabel("状態", { exact: true }).selectOption("active");
   await p.getByLabel("親カテゴリ名", { exact: true }).fill("金属");
   await save();
-  await p.locator("dialog").waitFor({ state: "hidden" });
+  await p
+    .locator('dialog[aria-labelledby="parent-editor-title"]')
+    .waitFor({ state: "hidden" });
   assert.equal(
     await p.getByRole("cell", { name: "金属", exact: true }).count(),
     1,
@@ -263,7 +292,9 @@ try {
   await p.getByLabel("親カテゴリ名", { exact: true }).fill("空親");
   await p.getByLabel("状態", { exact: true }).selectOption("inactive");
   await save();
-  await p.locator("dialog").waitFor({ state: "hidden" });
+  await p
+    .locator('dialog[aria-labelledby="parent-editor-title"]')
+    .waitFor({ state: "hidden" });
   await p
     .getByRole("button", { name: "＋ 空親に子を追加", exact: true })
     .click();
@@ -279,15 +310,74 @@ try {
     /一致するカテゴリはありません/,
   );
   await p.getByRole("button", { name: "解除", exact: true }).click();
-  await p.getByText("補助機能：CSV出力・取込", { exact: true }).click();
   assert.equal(
-    await p.getByRole("link", { name: "空テンプレート" }).isVisible(),
+    await p.getByText("補助機能：CSV出力・取込", { exact: true }).count(),
+    0,
+  );
+  const parentAction = await p
+    .getByRole("button", { name: "親カテゴリを追加", exact: true })
+    .boundingBox();
+  const exportAction = await p
+    .getByRole("link", { name: "CSV出力", exact: true })
+    .boundingBox();
+  const importAction = await p
+    .getByRole("button", { name: "CSV取込", exact: true })
+    .boundingBox();
+  assert.equal(parentAction.y, exportAction.y);
+  assert.equal(exportAction.y, importAction.y);
+  assert.equal(parentAction.height, importAction.height);
+  await p.getByRole("button", { name: "CSV取込", exact: true }).click();
+  await p.getByRole("link", { name: "空テンプレート" }).waitFor();
+  const header =
+    "id,new_key,parent_id,parent_new_key,category_name,display_order,is_active,updated_at\n";
+  await p.getByLabel("CSVファイル").setInputFiles({
+    name: "bad.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("wrong\nvalue"),
+  });
+  await p
+    .getByRole("button", { name: "取込内容をプレビュー", exact: true })
+    .click();
+  await p.getByText(/^列名・順序が異なります/).waitFor();
+  assert.equal(
+    await p
+      .getByRole("button", { name: "確認した全行を保存", exact: true })
+      .count(),
+    0,
+  );
+  await p.getByLabel("CSVファイル").setInputFiles({
+    name: "good.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(header + ",newroot,,,CSV新親,0,true,\n"),
+  });
+  await p
+    .getByRole("button", { name: "取込内容をプレビュー", exact: true })
+    .click();
+  await p.getByRole("heading", { name: /取込前確認/ }).waitFor();
+  await p.getByRole("checkbox").check();
+  await p
+    .getByRole("button", { name: "確認した全行を保存", exact: true })
+    .click();
+  await p.getByRole("button", { name: "保存中…", exact: true }).waitFor();
+  assert.equal(
+    await p.getByRole("button", { name: "CSV取込を閉じる" }).isDisabled(),
     true,
   );
+  await p.keyboard.press("Escape");
+  assert.equal(
+    await p.getByRole("dialog", { name: "カテゴリCSV取込" }).isVisible(),
+    true,
+  );
+  await p.getByText("架空CSV保存成功", { exact: true }).waitFor();
+  assert.equal(await p.evaluate(() => window.importCalls), 1);
+  await p.getByRole("button", { name: "CSV取込を閉じる" }).click();
   await p
     .getByRole("button", { name: "＋ 時計に子を追加", exact: true })
     .click();
-  assert.equal(await p.locator("details[inert]").count(), 1);
+  assert.equal(
+    await p.getByRole("button", { name: "CSV取込", exact: true }).isDisabled(),
+    true,
+  );
   await cancel();
   for (let i = 0; i < 2; i++) {
     await p.evaluate(() => {
@@ -312,7 +402,7 @@ try {
     path: path.join(out, "two-level-desktop.png"),
     fullPage: true,
   });
-  for (const width of [390, 320]) {
+  for (const width of [1440, 390, 320]) {
     await p.setViewportSize({ width, height: 844 });
     assert.equal(
       await p.evaluate(
@@ -324,16 +414,33 @@ try {
       .getByRole("button", { name: "親カテゴリを追加", exact: true })
       .click();
     await p.locator("dialog[open]").waitFor();
+    const parentRect = await p
+      .locator('dialog[aria-labelledby="parent-editor-title"]')
+      .boundingBox();
+    assert(
+      Math.abs(parentRect.x + parentRect.width / 2 - width / 2) < 2,
+      "parent horizontal center",
+    );
+    assert(
+      Math.abs(parentRect.y + parentRect.height / 2 - 844 / 2) < 2,
+      "parent vertical center",
+    );
+    console.log("parent dialog", width, parentRect);
+    await p.screenshot({ path: path.join(out, `parent-dialog-${width}.png`) });
     await p.getByLabel("親カテゴリ名", { exact: true }).focus();
     await p.keyboard.press("Shift+Tab");
     assert.equal(
       await p.evaluate(() =>
-        document.querySelector("dialog").contains(document.activeElement),
+        document
+          .querySelector('dialog[aria-labelledby="parent-editor-title"]')
+          .contains(document.activeElement),
       ),
       true,
     );
     await p.keyboard.press("Escape");
-    await p.locator("dialog").waitFor({ state: "hidden" });
+    await p
+      .locator('dialog[aria-labelledby="parent-editor-title"]')
+      .waitFor({ state: "hidden" });
     await p.evaluate(() => new Promise(requestAnimationFrame));
     assert.equal(
       await p
@@ -341,6 +448,39 @@ try {
         .evaluate((el) => el === document.activeElement),
       true,
     );
+    for (let repeat = 0; repeat < 2; repeat++) {
+      await p.getByRole("button", { name: "CSV取込", exact: true }).click();
+      const csv = p.getByRole("dialog", { name: "カテゴリCSV取込" });
+      await csv.waitFor();
+      const r = await csv.boundingBox();
+      if (repeat === 0) {
+        console.log("CSV dialog", width, r);
+        await p.screenshot({ path: path.join(out, `csv-dialog-${width}.png`) });
+      }
+      assert(
+        Math.abs(r.x + r.width / 2 - width / 2) < 2,
+        "CSV horizontal center",
+      );
+      assert(Math.abs(r.y + r.height / 2 - 844 / 2) < 2, "CSV vertical center");
+      assert.equal(
+        await p.getByRole("heading", { name: /取込前確認/ }).count(),
+        0,
+      );
+      await p.getByRole("button", { name: "CSV取込を閉じる" }).focus();
+      await p.keyboard.press("Shift+Tab");
+      assert.equal(
+        await csv.evaluate((el) => el.contains(document.activeElement)),
+        true,
+      );
+      await p.keyboard.press("Escape");
+      await csv.waitFor({ state: "hidden" });
+      assert.equal(
+        await p
+          .getByRole("button", { name: "CSV取込", exact: true })
+          .evaluate((el) => el === document.activeElement),
+        true,
+      );
+    }
     await p
       .getByRole("button", { name: "＋ 時計に子を追加", exact: true })
       .click();
@@ -352,8 +492,9 @@ try {
     fullPage: true,
   });
   assert.deepEqual(errors, []);
+  console.log(builtMode ? "PRODUCTION BUILT CSS" : "VITE CSS");
   console.log(
-    "PASS actual category React component: desktop/mobile, edit/cancel/keyboard, stale revision preserved, pending guard, parent rename/disable, empty parent, duplicate inactive, anchored move, filter/reset, readonly staff, CSV retained/inert; JS errors 0. Synthetic adapters, NOT authenticated E2E.",
+    "PASS actual category React component: desktop/mobile, edit/cancel/keyboard, stale revision preserved, pending guard, parent rename/disable, empty parent, duplicate inactive, anchored move, filter/reset, readonly staff, top CSV actions, CSV preview/error/confirm and pending close guard, centered parent/CSV overlays; JS errors 0. Synthetic adapters, NOT authenticated E2E.",
   );
 } catch (error) {
   const page = browser?.contexts()[0]?.pages()[0];
