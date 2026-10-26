@@ -165,22 +165,53 @@ describe("category atomic RPC and DB constraints", () => {
       ).rows,
     ).toEqual([{ category_level: 2 }]);
   });
+  it("allows moving a root and its children to separate roots in one valid CSV batch", async () => {
+    await db.exec("reset role");
+    await db.query(
+      "insert into public.product_categories(id,category_name)values($1,'A'),($2,'B')",
+      [id(100), id(101)],
+    );
+    await db.query(
+      "insert into public.product_categories(id,category_name,parent_category_id)values($1,'C',$2)",
+      [id(102), id(100)],
+    );
+    await user(1);
+    const rows = await existing();
+    await run([
+      edit(rows.find((c) => c.id === id(100))!, {
+        category_name: "A",
+        parent_id: id(101),
+      }),
+      edit(rows.find((c) => c.id === id(102))!, {
+        category_name: "C",
+        parent_id: id(101),
+      }),
+    ]);
+    expect(
+      (
+        await db.query(
+          "select count(*)::int n from public.product_categories where category_level=2",
+        )
+      ).rows,
+    ).toEqual([{ n: 2 }]);
+  });
   it("depth preflight aborts without rewriting existing deeper nodes", async () => {
     await db.exec(
       "reset role;alter table public.product_categories drop constraint category_max_two_levels",
     );
     try {
-      await user(1);
-      await run([
-        row(),
-        row({ new_key: "child", parent_new_key: "root", category_name: "子" }),
-        row({
-          new_key: "grandchild",
-          parent_new_key: "child",
-          category_name: "孫",
-        }),
-      ]);
-      await db.exec("reset role");
+      await db.query(
+        "insert into public.product_categories(id,category_name)values($1,'root')",
+        [id(100)],
+      );
+      await db.query(
+        "insert into public.product_categories(id,category_name,parent_category_id)values($1,'child',$2)",
+        [id(101), id(100)],
+      );
+      await db.query(
+        "insert into public.product_categories(id,category_name,parent_category_id)values($1,'grandchild',$2)",
+        [id(102), id(101)],
+      );
       await expect(
         db.exec(
           readFileSync(
