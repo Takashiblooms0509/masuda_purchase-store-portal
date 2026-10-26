@@ -24,6 +24,8 @@ function categoryError(error: { code?: string; message?: string }) {
     return "有効な子の親は無効にできません。子を移動または無効化してください。有効なカテゴリには有効な親を指定してください。";
   if (error.code === "40001" || error.code === "40P01")
     return "他の更新と競合しました。再読み込み・再プレビューして確認してください。";
+  if (error.message?.includes("category_max_two_levels"))
+    return "カテゴリは親と子の2階層までです。子を持つ親は別の親の下へ移動できません。";
   if (error.code === "23514")
     return "親カテゴリに自分自身や子孫は指定できません。親子関係を確認してください。";
   if (error.code === "22023" || error.code === "22P02")

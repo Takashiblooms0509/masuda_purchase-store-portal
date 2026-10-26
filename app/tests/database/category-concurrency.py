@@ -36,15 +36,16 @@ try:
     p=docker('run','--detach','--rm','--name',name,'--network','none','-e','POSTGRES_HOST_AUTH_METHOD=trust',IMAGE)
     if p.returncode: raise RuntimeError(p.stderr)
     for _ in range(60):
-        if docker('exec',name,'pg_isready','-U','postgres').returncode==0: break
+        if docker('exec',name,'pg_isready','-h','127.0.0.1','-U','postgres').returncode==0: break
         time.sleep(.1)
     sql("create role anon nologin;create role authenticated nologin;create schema auth;grant usage on schema auth to anon,authenticated;create table auth.users(id uuid primary key,email text);create function auth.uid()returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid;$$;")
-    for f in ['202610010001_phase1_auth_stores.sql','202610010002_phase2_business.sql','20261026040515_category_master_atomic_csv.sql']:
+    for f in ['202610010001_phase1_auth_stores.sql','202610010002_phase2_business.sql','20261026040515_category_master_atomic_csv.sql','20261026081626_category_two_levels.sql']:
         sql((ROOT/'supabase/migrations'/f).read_text())
     sql(f"insert into auth.users values('{uid}','test@example.test');update public.profiles set role='admin',is_active=true where id='{uid}';")
     race(f"update public.product_categories set is_active=false where id='{a}';", f"insert into public.product_categories(parent_category_id,category_name)values('{a}','child');", 'category_active_child')
     race("insert into public.product_categories(category_name)values('same');", "insert into public.product_categories(category_name)values('same');", 'category_sibling_name_unique')
     race(f"update public.product_categories set parent_category_id='{b}' where id='{a}';", f"update public.product_categories set parent_category_id='{a}' where id='{b}';", 'Category cycle')
+    race(f"update public.product_categories set parent_category_id='{b}' where id='{a}';", f"insert into public.product_categories(parent_category_id,category_name)values('{a}','grandchild');", 'category_max_two_levels')
     sql('truncate public.product_categories cascade;'+f"insert into public.product_categories(id,category_name)values('{a}','A');")
     revision=sql(f"select updated_at::text from public.product_categories where id='{a}';").stdout.strip()
     row={'id':a,'new_key':None,'parent_id':None,'parent_new_key':None,'category_name':'A','display_order':1,'is_active':True,'updated_at':revision}
@@ -59,5 +60,23 @@ try:
     r=sql('begin isolation level repeatable read;'+actor+"insert into public.product_categories(category_name)values('RR');commit;",False)
     assert 'category_repeatable_read_unsupported' in r.stderr
     print('PASS repeatable-read write rejected; all tests use synthetic data')
+    # Final graph is valid, but processing the old root before its child would transiently create level 3.
+    child='00000000-0000-4000-8000-000000000012'
+    sql('truncate public.product_categories cascade;'+f"insert into public.product_categories(id,category_name)values('{a}','A'),('{b}','B');insert into public.product_categories(id,category_name,parent_category_id)values('{child}','C','{a}');")
+    revisions=json.loads(sql("select json_object_agg(id,updated_at::text) from public.product_categories;").stdout)
+    def change(key,name,parent):
+        return {'id':key,'new_key':None,'parent_id':parent,'parent_new_key':None,'category_name':name,'display_order':0,'is_active':True,'updated_at':revisions[key]}
+    def batch(rows):
+        return "select public.save_category_batch('"+json.dumps(rows).replace("'","''")+"'::jsonb);"
+    sql(actor+batch([change(a,'A',b),change(child,'C',b)]))
+    assert sql("select count(*) from public.product_categories where category_level=2;").stdout.strip()=='2'
+    print('PASS final-valid parent/child rearrangement keeps stable IDs')
+    revisions=json.loads(sql("select json_object_agg(id,updated_at::text) from public.product_categories;").stdout)
+    invalid=sql(actor+batch([change(child,'C',a),change(b,'RENAMED',None)]),False)
+    assert invalid.returncode!=0 and 'category_max_two_levels' in invalid.stderr
+    assert sql(f"select category_name from public.product_categories where id='{b}';").stdout.strip()=='B'
+    assert sql("select max(category_level) from public.product_categories;").stdout.strip()=='2'
+    print('PASS final-invalid third-level batch rolls back all changes')
+
 finally:
     docker('stop',name)

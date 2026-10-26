@@ -249,6 +249,8 @@ export function previewCategories(
     siblings.add(sibling);
     if (n.parent && !graph.has(n.parent))
       errors.push(`「${n.name}」の親参照が存在しません。`);
+    if (n.parent && graph.get(n.parent)?.parent)
+      errors.push(`「${n.name}」は3階層以上になります。親カテゴリと子カテゴリの2階層にしてください。`);
     if (n.active && n.parent && graph.get(n.parent)?.active === false)
       errors.push(`「${n.name}」が有効なため親を無効にはできません。`);
     const path = new Set([id]);

@@ -46,6 +46,7 @@ describe("category atomic RPC and DB constraints", () => {
       "202610010001_phase1_auth_stores.sql",
       "202610010002_phase2_business.sql",
       migration,
+      "20261026081626_category_two_levels.sql",
     ])
       await db.exec(
         readFileSync(
@@ -101,6 +102,147 @@ describe("category atomic RPC and DB constraints", () => {
       "select c.category_level,p.category_name parent from public.product_categories c join public.product_categories p on p.id=c.parent_category_id",
     );
     expect(r.rows).toEqual([{ category_level: 2, parent: "金属" }]);
+  });
+  it("rejects third-level direct/CSV writes and parent-with-children moves atomically", async () => {
+    await run([
+      row(),
+      row({ new_key: "child", parent_new_key: "root", category_name: "金" }),
+      row({ new_key: "other", category_name: "別親" }),
+    ]);
+    const records = (
+      await db.query<{
+        id: string;
+        parent_category_id: string | null;
+        category_name: string;
+      }>(
+        "select id,parent_category_id,category_name from public.product_categories",
+      )
+    ).rows;
+    const child = records.find((c) => c.parent_category_id)!;
+    const root = records.find((c) => c.id === child.parent_category_id)!;
+    const other = records.find((c) => c.category_name === "別親")!;
+    await expect(
+      db.query(
+        "insert into public.product_categories(category_name,parent_category_id)values('孫',$1)",
+        [child.id],
+      ),
+    ).rejects.toThrow(/category_max_two_levels/);
+    await expect(
+      db.query(
+        "update public.product_categories set parent_category_id=$1 where id=$2",
+        [other.id, root.id],
+      ),
+    ).rejects.toThrow(/category_max_two_levels/);
+    await expect(
+      run([
+        row({ new_key: "safe", category_name: "追加" }),
+        row({
+          new_key: "grandchild",
+          parent_id: child.id,
+          category_name: "孫",
+        }),
+      ]),
+    ).rejects.toThrow(/category_max_two_levels/);
+    expect((await existing()).length).toBe(3);
+    expect(
+      (
+        await db.query(
+          "select category_level from public.product_categories where id=$1",
+          [root.id],
+        )
+      ).rows,
+    ).toEqual([{ category_level: 1 }]);
+    await db.query(
+      "update public.product_categories set parent_category_id=$1 where id=$2",
+      [other.id, child.id],
+    );
+    expect(
+      (
+        await db.query(
+          "select category_level from public.product_categories where id=$1",
+          [child.id],
+        )
+      ).rows,
+    ).toEqual([{ category_level: 2 }]);
+  });
+  it("allows moving a root and its children to separate roots in one valid CSV batch", async () => {
+    await db.exec("reset role");
+    await db.query(
+      "insert into public.product_categories(id,category_name)values($1,'A'),($2,'B')",
+      [id(100), id(101)],
+    );
+    await db.query(
+      "insert into public.product_categories(id,category_name,parent_category_id)values($1,'C',$2)",
+      [id(102), id(100)],
+    );
+    await user(1);
+    const rows = await existing();
+    await run([
+      edit(rows.find((c) => c.id === id(100))!, {
+        category_name: "A",
+        parent_id: id(101),
+      }),
+      edit(rows.find((c) => c.id === id(102))!, {
+        category_name: "C",
+        parent_id: id(101),
+      }),
+    ]);
+    expect(
+      (
+        await db.query(
+          "select count(*)::int n from public.product_categories where category_level=2",
+        )
+      ).rows,
+    ).toEqual([{ n: 2 }]);
+  });
+  it("depth preflight aborts without rewriting existing deeper nodes", async () => {
+    await db.exec(
+      "reset role;alter table public.product_categories drop constraint category_max_two_levels",
+    );
+    try {
+      await db.query(
+        "insert into public.product_categories(id,category_name)values($1,'root')",
+        [id(100)],
+      );
+      await db.query(
+        "insert into public.product_categories(id,category_name,parent_category_id)values($1,'child',$2)",
+        [id(101), id(100)],
+      );
+      await db.query(
+        "insert into public.product_categories(id,category_name,parent_category_id)values($1,'grandchild',$2)",
+        [id(102), id(101)],
+      );
+      await expect(
+        db.exec(
+          readFileSync(
+            new URL(
+              "../../supabase/migrations/20261026081626_category_two_levels.sql",
+              import.meta.url,
+            ),
+            "utf8",
+          ),
+        ),
+      ).rejects.toThrow(/category_existing_depth_invalid/);
+      await db.exec("rollback");
+      expect(
+        (
+          await db.query(
+            "select max(category_level) depth,count(*)::int n from public.product_categories",
+          )
+        ).rows,
+      ).toEqual([{ depth: 3, n: 3 }]);
+    } finally {
+      await db.exec("reset role;truncate public.product_categories cascade");
+      await db.exec(
+        readFileSync(
+          new URL(
+            "../../supabase/migrations/20261026081626_category_two_levels.sql",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+    }
   });
   it("rejects root/sibling duplicates including inactive and whitespace, allows other parents", async () => {
     await run([row(), row({ new_key: "other", category_name: "カード" })]);

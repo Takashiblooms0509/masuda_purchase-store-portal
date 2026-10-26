@@ -61,7 +61,7 @@ export function CategoryCsvPanel() {
           更新はidとupdated_atをそのまま残します。追加はid・updated_atを空欄にし、new_keyに英字から始まる一意のキー（英数字・_・-、64文字まで）を入力します。
         </p>
         <p>
-          親が既存ならparent_idにUUID、新規ならparent_new_keyに親行のnew_keyを指定します。両方の指定はできません。親なしは両方空欄です。例：親のnew_keyをmetal、子のparent_new_keyをmetalにすると同時追加できます。
+          親が既存ならparent_idにUUID、新規ならparent_new_keyに親行のnew_keyを指定します。両方の指定はできません。親なしは両方空欄です。親と子の2階層までで、子を親に指定する3階層以上の取込はできません。例：親のnew_keyをmetal、子のparent_new_keyをmetalにすると同時追加できます。
         </p>
         <p>
           category_nameは必須、display_orderは整数、is_activeはtrueまたはfalseです。同じ親の下の同名（前後空白を除く）は無効行も含めて禁止。有効な子を残した親の無効化はできません。親子の無効化や移動はCSVでまとめて指定できます。
