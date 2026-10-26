@@ -1,6 +1,6 @@
 # GREEN ASSET PORTAL / HOME 統合レビュー
 
-状態：実装・ローカル検証済み。親スレッドによる SQL と影響の確認待ち。本番DBへの適用、push、PR作成、デプロイは未実行。
+状態：実装・ローカル検証済み。既存明細を未確定にする扱いはユーザー承認済み（現在はダミーデータ）。親レビューに基づき正式migration化。本番DBへの適用、push、PR作成、デプロイは未実行。
 
 ## 最新の合意仕様
 
@@ -15,12 +15,12 @@
 
 ## SQL と適用時の影響（未適用）
 
-レビュー対象は `docs/sql/home-reporting-draft.sql`。正式 migration ではなく適用前の SQL 案。親の確認後、Supabase CLI の migration new で履歴ファイルを作成し、同じSQLを配置してテスト参照先を移すこと。既存 migration は変更していない。
+正式ファイルは `supabase/migrations/20261026024940_home_item_outcomes_reporting.sql`。Supabase CLI 2.122.0 の `migration new home_item_outcomes_reporting` で生成し、レビュー済みSQLを配置した（冒頭コメントのみ正式化）。テスト参照も正式ファイルへ移した。旧 `docs/sql/home-reporting-draft.sql` は参照先を示すコメントのみ。既存 migration は変更していない。
 
 1. `purchase_items.purchase_status text NOT NULL DEFAULT 'pending'` を追加。CHECK は `pending / completed / not_completed`。新テーブル・カテゴリseed・データ補正はない。
-2. 既存明細はすべて `pending` として読まれる。過去の取引status・金額・数量から成約状態を推定しない。人が商品ごとに確認して状態を入力するまで、過去明細はHOMEの成約率・金額に入らない。そのため切替直後は過去のHOME金額が0、成約率が「—」になる場合がある。来店数と未確定点数は表示する。
+2. ユーザー承認済み：既存明細はすべて `pending` として読まれる。過去の取引status・金額・数量から成約状態を推定しない。人が商品ごとに確認して状態を入力するまで、過去明細はHOMEの成約率・金額に入らない。そのため切替直後は過去のHOME金額が0、成約率が「—」になる場合がある。来店数と未確定点数は表示する。
 3. 新列への INSERT/UPDATE 権限だけを、従来の取引編集者と同じ authenticated ロールへ追加。既存の親取引→店舗RLSをそのまま通す。店舗・ユーザー・顧客のアクセス範囲を拡張しない。SELECTは既存のテーブル単位grantで保護される。
-4. `save_purchase_transaction` を CREATE OR REPLACE。既存のSECURITY INVOKER、原子性、明細UUID／行順保持、店舗FK・原本確認を維持し、新列を保存する。旧クライアントがキーを省略した更新は既存値保持、追加明細はpending。明示的な不正値はDB制約で拒否。
+4. `save_purchase_transaction` を CREATE OR REPLACE。既存のSECURITY INVOKER、原子性、明細UUID／行順保持、店舗FK・原本確認を維持し、新列を保存する。旧クライアントがキーを省略した更新は既存値保持、追加明細はpending。明示的な不正値はDB制約で拒否。親の実DB読取レビューによると、この保存RPCには既存の明示的な anon EXECUTE がある。CREATE OR REPLACE と REVOKE FROM public はそれを消さず維持する（authenticated-onlyへ変更するものではない）。匿名のデータアクセスは既存のテーブル権限／RLSで拒否される。テストも既存 anon EXECUTE を付与した状態を再現し、関数呼出し後のテーブルアクセスが拒否されることを確認する。
 5. `get_home_report` を追加。SECURITY INVOKER / STABLE / 空search_path。匿名実行不可、authenticatedのみ実行可。日本時間の期間境界、最大366日、店舗・カテゴリ・選択日をDB側でも検証し、既存RLSの下で集計。DB内集計なのでRESTの1000行上限でKPIが欠落しない。
 6. サマリ、日次、カテゴリ、直近5件、選択日の商品を1回のSQLスナップショットで返す。商品詳細は直近100明細のみ返し全件数を明示、取引一覧へ導線を置く。集計は100件で打ち切らない。
 
@@ -46,12 +46,12 @@
 
 ## 検証済み
 
-`npm --prefix app run check`：型チェック、lint、11ファイル125テスト、本番ビルド成功。既存business-rlsの原子保存・UUID保持・他店舗・FK等のテストは今回の置換後RPCを適用したローカルPGliteでも実行した。Phase3等の既存テストも保持。
+`npm --prefix app run check`：型チェック、lint、11ファイル126テスト、本番ビルド成功。既存business-rlsの原子保存・UUID保持・他店舗・FK等のテストは今回の置換後RPCを適用したローカルPGliteでも実行した。Phase3等の既存テストも保持。
 
 新規テスト：
 - HOMEフィルター：JST月境界／閏年、不正・重複パラメータ、366日上限、日付解除、商品単位成約率、明示状態検証。
 - HOMEサーバー境界：認証失敗時の取得停止、他店舗パラメータ拒否、RPC引数とレスポンス検証、取得失敗時に生DBエラー・サンプルを返さない。
-- 提案SQL：混在成約、quantityを点数に加算しない、ヘッダー金額／status不使用、未確定の既存明細、null／0円、カテゴリ／未分類／店舗、JST境界、無効ユーザー／店舗、匿名拒否、他店舗拒否、不正期間／カテゴリ、1105明細の正確集計と詳細100件上限、旧クライアント互換、不正状態拒否。
+- 提案SQL：混在成約、quantityを点数に加算しない、ヘッダー金額／status不使用、未確定の既存明細、null／0円、カテゴリ／未分類／店舗、JST境界、無効ユーザー／店舗、匿名拒否、他店舗拒否、不正期間／カテゴリ、1105明細の正確集計と詳細100件上限、旧クライアント互換、不正状態拒否。保存RPCの既存anon EXECUTEを維持したうえで匿名テーブルアクセス拒否、新規集計RPCのanon EXECUTE拒否を分けて検証。
 
 `node app/tests/browser/home.mjs`：実際のHOME Reactコンポーネント→ループバックHTTP→提案SQL/PGliteのローカル検証。fixtureは tests 配下だけで、アプリに検証API・架空データを追加していない。環境既存のPlaywright／Chromiumを使用。日付・店舗・カテゴリ、ユーザー例50%、詳細／解除、指標切替、6回の繰り返し、空データ、期間逆転、キーボード円グラフ、390px幅の横あふれなし、ブラウザ例外0、外部通信0を確認。
 
@@ -61,8 +61,15 @@
 
 ## 親確認後の順序
 
-SQLと過去明細pendingの扱いを確認 → 正式migration化 → 対象環境とバックアップ／適用手順を確認してSQL適用 → 実認証・実RLSの読取／入力確認 → 親から公開指示後にpush・PR／merge・本番公開。
+既存明細pending運用の承認・正式migration化は完了 → 親による実DB整合確認・対象環境とバックアップ／適用手順を確認してSQL適用 → 実認証・実RLSの読取／入力確認 → 親から公開指示後にpush・PR／merge・本番公開。
 
 適用はアプリ公開より先。先に新アプリだけ公開するとRPC不在でHOME取得が失敗する。問題時は旧アプリへ戻し、新列と入力済み状態は保持する。新列をDROPして入力済み状態を失うロールバックは行わない。
 
 新規有料サービス・秘密値設定・セキュリティ設定変更なし。既存Codespaceにアクセスしていない。
+
+
+## 正式化時の確認
+
+保存RPCの関数シグネチャ／本体をPhase2原文と機械比較した。新列のUPDATE式・INSERT列／値の3箇所だけを除くとバイト単位で一致する。したがって新列以外の保存挙動は変更していない。比較記録は `docs/home-review-artifacts/save-rpc-diff.txt`。
+
+本環境はSupabaseのアクセストークン・DB接続情報の環境変数、保存済みCLIトークン、プロジェクトリンクが確認できず、本番適用可能な接続状態ではない。秘密値を表示・作成・設定していない。親の接続済みツールから適用する必要がある。最新版CLIの初回起動は読み取り専用ホームへのキャッシュ書込みで失敗したが、専用の一時ディレクトリを `SUPABASE_HOME` に指定して正常起動し、同じ2.122.0でmigrationを生成した。システムHOME・認証・セキュリティ設定は変更していない。

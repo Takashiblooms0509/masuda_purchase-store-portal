@@ -120,10 +120,18 @@ beforeAll(async () => {
     "insert into public.purchase_items(id,purchase_transaction_id,item_name,purchase_amount) values($1,$2,'legacy',500)",
     [id(99), id(90)],
   );
+  // Match the existing production ACL reported by the parent review.
+  // CREATE OR REPLACE must preserve this explicit anon EXECUTE grant.
+  await db.exec(
+    "grant execute on function public.save_purchase_transaction(uuid,jsonb,jsonb) to anon",
+  );
   // Isolated local test DB only; no Supabase connection.
   await db.exec(
     readFileSync(
-      new URL("../../docs/sql/home-reporting-draft.sql", import.meta.url),
+      new URL(
+        "../../supabase/migrations/20261026024940_home_item_outcomes_reporting.sql",
+        import.meta.url,
+      ),
       "utf8",
     ),
   );
@@ -152,6 +160,26 @@ afterAll(async () => {
   await db.close();
 });
 describe("HOME proposed SQL and existing store RLS", () => {
+  it("preserves existing anon EXECUTE on save RPC but denies anonymous table access", async () => {
+    const { rows } = await db.query<{ allowed: boolean }>(
+      "select has_function_privilege('anon', 'public.save_purchase_transaction(uuid,jsonb,jsonb)', 'EXECUTE') as allowed",
+    );
+    expect(rows[0].allowed).toBe(true);
+    await asUser(null, "anon");
+    await expect(
+      db.query("select public.save_purchase_transaction($1,$2,$3)", [
+        id(100),
+        JSON.stringify({
+          store_id: storeA,
+          customer_id: customerA,
+          visit_datetime: "2026-10-01T00:00:00+09:00",
+          transaction_status: "completed",
+        }),
+        JSON.stringify([]),
+      ]),
+    ).rejects.toThrow(/permission denied for table purchase_transactions/);
+  });
+
   it("counts mixed outcomes as items and ignores quantity and transaction header money/status", async () => {
     await asUser(staff);
     const r = await report({

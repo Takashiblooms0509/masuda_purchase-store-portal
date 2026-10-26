@@ -95,7 +95,7 @@ describe("Phase2 business tables / actual PostgreSQL RLS", () => {
     // Re-run the existing atomic-save/RLS cases against the proposed HOME RPC update.
     await db.exec(
       readFileSync(
-        new URL("../../docs/sql/home-reporting-draft.sql", import.meta.url),
+        new URL("../../supabase/migrations/20261026024940_home_item_outcomes_reporting.sql", import.meta.url),
         "utf8",
       ),
     );

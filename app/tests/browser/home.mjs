@@ -30,7 +30,7 @@ try {
     );
   await db.exec(
     await readFile(
-      path.join(repo, "docs/sql/home-reporting-draft.sql"),
+      path.join(repo, "supabase/migrations/20261026024940_home_item_outcomes_reporting.sql"),
       "utf8",
     ),
   );
