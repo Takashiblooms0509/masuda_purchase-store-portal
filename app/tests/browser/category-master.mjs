@@ -139,6 +139,56 @@ try {
     window.rows[1].category_name = "金";
     window.render();
   });
+  // Refreshed rows can leave name/state/parent filters; keep the draft and Cancel accessible.
+  for (const changed of ["name", "state", "parent", "missing"]) {
+    await p.getByLabel("親カテゴリ", { exact: true }).selectOption("1");
+    await p.getByLabel("子の状態", { exact: true }).selectOption("active");
+    await p.getByLabel("カテゴリ名", { exact: true }).fill("金");
+    await p.getByRole("button", { name: "検索", exact: true }).click();
+    await edit();
+    await p.getByLabel("子カテゴリ名", { exact: true }).fill("保持する入力");
+    await p.evaluate((changed) => {
+      window.savedRows = window.rows.map((c) => ({ ...c }));
+      const c = window.rows.find((c) => c.id === "2");
+      if (changed === "name") {
+        c.category_name = "別名";
+        window.rows.find((c) => c.id === "1").category_name = "別親名";
+      }
+      if (changed === "state") c.is_active = false;
+      if (changed === "parent") c.parent_category_id = "4";
+      if (changed === "missing")
+        window.rows = window.rows.filter((c) => c.id !== "2");
+      c.updated_at = "2026-10-26T10:00:00Z";
+      window.conflict = true;
+      window.render();
+    }, changed);
+    await p
+      .getByText(
+        "更新により編集中の行が検索条件から外れました。入力内容は保持しています。",
+        { exact: true },
+      )
+      .waitFor();
+    assert.equal(
+      await p.getByLabel("子カテゴリ名", { exact: true }).inputValue(),
+      "保持する入力",
+    );
+    await save();
+    assert.equal(
+      await p.evaluate(() => window.lastForm.updated_at),
+      "2026-01-01T00:00:00.123456Z",
+    );
+    await cancel();
+    assert.equal(
+      await p.getByRole("button", { name: "検索", exact: true }).isEnabled(),
+      true,
+    );
+    await p.evaluate(() => {
+      window.rows = window.savedRows;
+      window.conflict = false;
+      window.render();
+    });
+    await p.getByRole("button", { name: "解除", exact: true }).click();
+  }
   await edit();
   await p.getByLabel("子カテゴリ名", { exact: true }).fill("純金");
   await p.evaluate(() => (window.delay = true));

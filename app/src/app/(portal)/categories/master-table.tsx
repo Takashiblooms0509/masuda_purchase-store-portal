@@ -239,17 +239,26 @@ export function CategoryMaster({
       )
     );
   }
+  const matchesFilter = (c: ProductCategory, parent: ProductCategory) =>
+    (!applied.state ||
+      (c.is_active ? "active" : "inactive") === applied.state) &&
+    `${parent.category_name} ${c.category_name}`
+      .toLocaleLowerCase()
+      .includes(applied.query.toLocaleLowerCase());
+  const draftRowVisible = roots.some(
+    (parent) =>
+      (!applied.parent || parent.id === applied.parent) &&
+      ((draft?.kind === "child" &&
+        !draft.original &&
+        draft.anchor === parent.id) ||
+        children(parent.id).some(
+          (c) => c.id === draft?.original?.id && matchesFilter(c, parent),
+        )),
+  );
   const groupRows = roots.map((parent) => {
     if (applied.parent && parent.id !== applied.parent) return null;
     const all = children(parent.id);
-    const matches = all.filter(
-      (c) =>
-        (!applied.state ||
-          (c.is_active ? "active" : "inactive") === applied.state) &&
-        `${parent.category_name} ${c.category_name}`
-          .toLocaleLowerCase()
-          .includes(applied.query.toLocaleLowerCase()),
-    );
+    const matches = all.filter((c) => matchesFilter(c, parent));
     // Keep a new child's editor anchored to its original group while choosing another parent.
     const adding =
       draft?.kind === "child" && !draft.original && draft.anchor === parent.id;
@@ -454,6 +463,16 @@ export function CategoryMaster({
             ) : (
               <tr>
                 <td colSpan={4}>条件に一致するカテゴリはありません。</td>
+              </tr>
+            )}
+            {draft?.kind === "child" && !draftRowVisible && (
+              <tr className={styles.editing}>
+                <td colSpan={4}>
+                  <p className="muted">
+                    更新により編集中の行が検索条件から外れました。入力内容は保持しています。
+                  </p>
+                  {editor()}
+                </td>
               </tr>
             )}
           </tbody>
