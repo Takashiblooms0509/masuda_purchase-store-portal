@@ -237,6 +237,10 @@ export type Database = {
         Args: { p_actor: string; p_customer: string; p_document: string };
         Returns: Json;
       };
+      insert_customer_csv_v2: {
+        Args: { p_request: string; p_rows: Json };
+        Returns: number;
+      };
       insert_customer_csv: {
         Args: { p_request: string; p_rows: Json };
         Returns: number;

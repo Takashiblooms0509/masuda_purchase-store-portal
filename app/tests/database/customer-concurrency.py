@@ -13,6 +13,9 @@ actor=f"set role authenticated;select set_config('request.jwt.claim.sub','{uid(1
 def batch(name,request):
  row={'store_id':uid(10),'name':name,'name_kana':'','phone':'','membership_card_number':'','approved_duplicate_ids':[]}
  return "select insert_customer_csv('%s','%s'::jsonb);"%(uid(request),json.dumps([row]))
+def batch_full(name,request):
+ row={'store_id':uid(10),'name':name,'name_kana':'','phone':'','membership_card_number':'','approved_duplicate_ids':[], 'birth_date':'','gender':'unspecified','occupation':'DEMO','postal_code':'000-0000','address':'FAKE','dm_allowed':'false','identification_type':'マイナンバーカード','identification_number':''}
+ return "select insert_customer_csv_v2('%s','%s'::jsonb);"%(uid(request),json.dumps([row]))
 def race(first,second,expect_error=None):
  with concurrent.futures.ThreadPoolExecutor() as pool:
   future=pool.submit(sql,'begin;'+actor+first+'select pg_sleep(1);commit;',False)
@@ -49,4 +52,10 @@ try:
  r=sql('begin isolation level repeatable read;'+actor+batch('RR',95)+'commit;',False)
  assert 'Unsupported isolation' in r.stderr,r.stderr
  print('PASS repeatable-read import rejected; no live data tested')
+ race(batch_full('V2-RETRY',100),batch_full('V2-RETRY',100))
+ assert sql("select count(*) from customers where name='V2-RETRY';").stdout.strip()=='1'
+ print('PASS v2 concurrent identical retry remains insert-once')
+ race(batch_full('V2-PERSON',101),batch_full('V2-PERSON',102),'Candidates changed')
+ race(batch('MIXED',103),batch_full('MIXED',104),'Candidates changed')
+ print('PASS v2 and legacy share duplicate serialization, no silent overwrite')
 finally:docker('stop',NAME)

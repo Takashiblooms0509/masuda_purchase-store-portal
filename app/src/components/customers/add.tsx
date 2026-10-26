@@ -1,5 +1,6 @@
 "use client";
 import { useActionState, useRef, useState } from "react";
+import { genderLabels } from "@/lib/customers/detail";
 import type { Store } from "@/types/database";
 import { CustomerForm } from "@/app/(portal)/customers/forms";
 import {
@@ -27,6 +28,14 @@ function Confirmation({
       store_id: r.store_id,
       name: r.name,
       name_kana: r.name_kana,
+      birth_date: r.birth_date,
+      gender: r.gender,
+      occupation: r.occupation,
+      postal_code: r.postal_code,
+      address: r.address,
+      dm_allowed: r.dm_allowed,
+      identification_type: r.identification_type,
+      identification_number: r.identification_number,
       phone: r.phone,
       membership_card_number: r.membership_card_number,
       approved_duplicate_ids: r.candidates.map((c) => c.id),
@@ -56,6 +65,28 @@ function Confirmation({
               {r.phone || "電話未登録"} /{" "}
               {r.membership_card_number || "カード未登録"}
             </p>
+            <details>
+              <summary>登録項目を確認</summary>
+              <p className="small">
+                フリガナ：{r.name_kana || "—"} / 生年月日：{r.birth_date || "—"}{" "}
+                / 性別：
+                {genderLabels[r.gender as keyof typeof genderLabels] || "—"} /
+                職業：{r.occupation || "—"}
+              </p>
+              <p className="small">
+                郵便番号：{r.postal_code || "—"} / 住所：{r.address || "—"} /
+                DM：
+                {r.dm_allowed === "true"
+                  ? "可"
+                  : r.dm_allowed === "false"
+                    ? "不可"
+                    : "未確認"}
+              </p>
+              <p className="small">
+                本人確認書類：{r.identification_type || "—"} / 番号：
+                {r.identification_number ? "••••••••（入力あり）" : "未入力"}
+              </p>
+            </details>
             {r.candidates.length > 0 && (
               <p className="notice">
                 重複候補：{r.candidates.map((c) => c.name).join("、")}
@@ -75,7 +106,7 @@ function Confirmation({
     </form>
   );
 }
-function CsvImport() {
+function CsvImport({ stores }: { stores: Store[] }) {
   const [state, action, pending] = useActionState(previewCustomerImport, {
     message: "",
   });
@@ -88,7 +119,14 @@ function CsvImport() {
         日本語CSVテンプレートをダウンロード
       </a>
       <p className="muted small">
-        登録店舗コード・氏名・フリガナ・電話番号・リピーターズカード番号。本人確認番号、住所、生年月日、メモは含みません。スタッフは自店舗のコードのみ使用できます。
+        13列の新規登録専用テンプレートです。「登録店舗」は店舗コードを入力します（店舗名・UUIDは不可）。スタッフは自店舗のみ登録できます。生年月日はYYYY-MM-DD、性別は男性／女性／その他／未回答、DM可否は可／不可（空欄は未確認）。電話・カード・郵便番号等は文字列として扱い、表計算ソフトでも列を文字列に設定してください。マイナンバーカードの本人確認書類番号は必ず空欄にしてください。メモ・画像はCSV対象外です。
+      </p>
+      <p className="muted small">
+        登録店舗コード：
+        {stores
+          .filter((s) => s.is_active)
+          .map((s) => `${s.code}（${s.name}）`)
+          .join("、")}
       </p>
       <form action={action} onSubmit={() => setSubmitted(revision)}>
         <label>
@@ -184,7 +222,7 @@ export function CustomerAdd({
           ) : mode === "direct" ? (
             <CustomerForm stores={stores} />
           ) : (
-            <CsvImport />
+            <CsvImport stores={stores} />
           )}
         </div>
       </dialog>

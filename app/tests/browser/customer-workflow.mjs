@@ -42,7 +42,7 @@ export const storeAllowed=(s,id)=>s.stores.some(x=>x.id===id);export const saveE
 await writeFile(
   path.join(temp, "actions.ts"),
   `
-import {customers,id} from './fixture';import {previewCustomerCsv} from '${app}/src/lib/customers/csv';
+import {customers,id} from './fixture';import {previewCustomerCsv} from '${app}/src/lib/customers/csv-v2';
 export async function saveCustomer(prev,form){window.saveCalls=(window.saveCalls||0)+1;window.lastSave=Object.fromEntries(form);return {message:'架空保存成功',success:true};}
 export async function saveCustomerDocument(){return {message:'使用しません'};}
 export async function previewCustomerImport(prev,form){try{const p=previewCustomerCsv(await form.get('file').text());if(p.errors.length)return{message:p.errors.map(x=>x.message).join(' ')};return {message:'架空プレビュー',success:true,request:crypto.randomUUID(),rows:p.rows.map(r=>({...r.value,line:r.line,store_id:id(10),store_name:'架空10店',candidates:r.value.name==='架空顧客20'?[{id:id(20),name:'架空顧客20'}]:[]}))};}catch(e){return{message:e.message};}}
@@ -213,6 +213,14 @@ try {
       1,
       key,
     );
+  const typeSelect=p.locator('.customer-dialog select[name=identification_type]');
+  assert.deepEqual(await typeSelect.locator('option').allTextContents(), ['未登録','運転免許証','マイナンバーカード','パスポート','その他']);
+  await typeSelect.selectOption('マイナンバーカード');
+  assert.equal(await p.locator('.customer-dialog [name=identification_number]').isDisabled(),true);
+  assert.equal(await p.locator('.customer-dialog [name=identification_number]').inputValue(),'');
+  assert.equal(await p.getByRole('button',{name:'番号を表示',exact:true}).count(),0);
+  await typeSelect.selectOption('パスポート');
+  assert.equal(await p.locator('.customer-dialog [name=identification_number]').isDisabled(),false);
   await p.keyboard.press("Escape");
   await p.getByRole("button", { name: "顧客を追加", exact: true }).click();
   await p.getByRole("button", { name: "CSVから追加", exact: true }).click();
@@ -222,7 +230,7 @@ try {
       name: "test.csv",
       mimeType: "text/csv",
       buffer: Buffer.from(
-        "登録店舗コード,氏名,フリガナ,電話番号,リピーターズカード番号\nA,架空顧客20,,,\nA,新規架空,,,",
+        "登録店舗,氏名,フリガナ,生年月日,性別,職業,電話番号,\"メンバーズカード番号(リピーターNo,)\",郵便番号,住所,DM可否,本人確認書類の種類,本人確認書類番号\nA,架空顧客20,,,,,,,,,,,\nA,新規架空,,,,,,,,,,,",
       ),
     });
   await p.getByRole("button", { name: "プレビューと検証" }).click();
