@@ -1,9 +1,13 @@
+import { z } from "zod";
 import { PGlite } from "@electric-sql/pglite";
 import { readFileSync, readdirSync } from "node:fs";
 import { beforeAll, beforeEach, afterEach, afterAll, it, expect } from "vitest";
 const id = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 let db: PGlite;
+let legacyDefinitions: unknown[];
+const legacyDefinitionSql =
+  "select proname,pg_get_functiondef(oid) definition,proacl::text acl from pg_proc where oid in ('private.customer_directory(text,text,text,uuid,date,date,uuid,integer)'::regprocedure,'public.get_customer_directory(text,text,text,uuid,date,date,uuid,integer)'::regprocedure) order by proname";
 async function actor(n: number, role = "authenticated") {
   await db.exec(`reset role;set role ${role}`);
   await db.query("select set_config('request.jwt.claim.sub',$1,false)", [
@@ -36,8 +40,11 @@ beforeAll(async () => {
   const root = new URL("../../supabase/migrations/", import.meta.url);
   for (const f of readdirSync(root)
     .filter((f) => f.endsWith(".sql"))
-    .sort())
+    .sort()) {
+    if (f === "20261026062254_customer_review_workflow.sql")
+      legacyDefinitions = (await db.query(legacyDefinitionSql)).rows;
     await db.exec(readFileSync(new URL(f, root), "utf8"));
+  }
   await db.exec(
     "grant usage on schema public,private to service_role;grant all on all tables in schema public,storage to service_role",
   );
@@ -114,7 +121,7 @@ it("all-store detail is explicit business projection; base tables remain scoped"
       customers: Record<string, unknown>[];
       path: string;
     };
-  }>("select get_customer_directory() r");
+  }>("select get_customer_directory_v2() r");
   expect(d.rows[0].r.customers).toHaveLength(2);
   expect(d.rows[0].r.customers[0]).toHaveProperty("age");
   expect(d.rows[0].r.customers[0]).not.toHaveProperty("birth_date");
@@ -328,4 +335,58 @@ it("paginates customer-linked history and documents without overlap or unrelated
   expect(first.transaction_count).toBe(13);
   for (const p of [null, 0, 10001])
     await denied("select get_customer_detail($1,1,$2)", [id(21), p], "22023");
+});
+
+it("keeps legacy functions and ACL byte-for-byte and old strict response parser compatible after migration", async () => {
+  expect((await db.query(legacyDefinitionSql)).rows).toEqual(legacyDefinitions);
+  const customer = z.strictObject({
+    id: z.uuid(),
+    store_id: z.uuid(),
+    name: z.string(),
+    name_kana: z.string().nullable(),
+    phone: z.string().nullable(),
+    membership_card_number: z.string().nullable(),
+    created_at: z.string(),
+  });
+  const legacy = z.strictObject({
+    customers: z.array(customer),
+    total: z.number(),
+    selected: customer.nullable(),
+    stores: z.array(z.strictObject({ id: z.uuid(), name: z.string() })),
+  });
+  const value = (
+    await db.query<{ r: unknown }>(
+      "select get_customer_directory(p_selected:=$1) r",
+      [id(21)],
+    )
+  ).rows[0].r;
+  const parsed = legacy.parse(value);
+  expect(parsed.customers).toHaveLength(2);
+  expect(parsed.selected?.id).toBe(id(21));
+  expect(parsed.selected).not.toHaveProperty("age");
+  expect(parsed.selected).not.toHaveProperty("gender");
+});
+it("versioned directory has exact authenticated-only ACL, fixed path and current-profile gate", async () => {
+  const sig = "(text,text,text,uuid,date,date,uuid,integer)";
+  for (const [name, definer] of [
+    ["private.customer_directory_v2", true],
+    ["public.get_customer_directory_v2", false],
+  ] as const) {
+    const result = await db.query(
+      "select prosecdef,proconfig,has_function_privilege('anon',oid,'execute') anon,has_function_privilege('authenticated',oid,'execute') authenticated from pg_proc where oid=$1::regprocedure",
+      [name + sig],
+    );
+    expect(result.rows[0]).toEqual({
+      prosecdef: definer,
+      proconfig: ['search_path=""'],
+      anon: false,
+      authenticated: true,
+    });
+  }
+  await actor(3);
+  await denied("select get_customer_directory_v2()");
+  await actor(4);
+  await denied("select get_customer_directory_v2()");
+  await actor(2, "anon");
+  await denied("select get_customer_directory_v2()");
 });

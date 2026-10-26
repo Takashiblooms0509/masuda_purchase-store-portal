@@ -36,7 +36,7 @@ export default async function CustomersPage({
   if (result.success) {
     const filters = result.data;
     try {
-      const { data, error } = await supabase.rpc("get_customer_directory", {
+      const { data, error } = await supabase.rpc("get_customer_directory_v2", {
         p_name: filters.name,
         p_phone: filters.phone,
         p_card: filters.card,

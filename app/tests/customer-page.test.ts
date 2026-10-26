@@ -121,7 +121,7 @@ describe("Customer directory boundary", () => {
         selected: customer.id,
       }),
     });
-    expect(rpc).toHaveBeenCalledWith("get_customer_directory", {
+    expect(rpc).toHaveBeenCalledWith("get_customer_directory_v2", {
       p_name: "A%",
       p_phone: "001",
       p_card: "012",

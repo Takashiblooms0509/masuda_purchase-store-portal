@@ -1,7 +1,7 @@
 # Customer workflow implementation / review checkpoint
 
 Branch: feat/customer-review-workflow. Base: 8fcf4bc0304c3c702b08b34911d5f9ad9c71473f.
-Production migration, push, PR, merge and deployment have NOT been performed.
+Draft PR #9 is prepared. Production migration, merge and deployment have NOT been performed.
 
 ## Implemented UI and field coverage
 
@@ -28,12 +28,12 @@ One RPC transaction covers all rows. New/changed candidate sets reject the batch
 ## Exact migration and security changes
 
 File: 20261026062254_customer_review_workflow.sql
-SHA256: bad166dfd7df046d46ed0808ed8fac7d0f6240295aeafc493ebd52ef0d4aee41
+SHA256: 1e7ec9c82a6dba74dc1df88fb525dcb2d5b2916a412f0af7e69005b2a6f41d3d
 
 1. customers: add nullable gender/memo and corresponding existing-role column write grants; existing row policies stay in place.
 2. private.customer_reader_allowed(): SECURITY DEFINER, empty search_path, derives identity from auth.uid()/current profiles/store state. No arguments to spoof an actor. Authenticated execute only, no PUBLIC/anon.
 3. private.customer_detail(uuid,integer,integer): SECURITY DEFINER, same gate, explicit JSON business projection, required customer ID. History 10 rows/page, documents 20/page, pages 1..10000. Ownership is customer_id, not a caller-supplied store or arbitrary query. No raw AI result, storage path, upload metadata, auth data or secrets returned. public.get_customer_detail is INVOKER with identical authenticated-only ACL.
-4. Existing private.customer_directory projection gains only gender and derived age; DOB remains absent. Existing signature, filter logic, wrapper and ACL retained.
+4. Add private.customer_directory_v2 and public.get_customer_directory_v2 with authenticated-only exact ACL, current-profile gate and fixed search_path. V2 adds approved gender and derived age, never DOB. The old private.customer_directory/public.get_customer_directory definitions AND ACLs remain byte-for-byte unchanged. Only the new app calls v2. Tests parse legacy RPC output using the old strict schema after the entire migration is applied.
 5. public.customer_media_source(uuid,uuid,uuid): SECURITY INVOKER, service_role execute only. Rechecks supplied actor against current profiles/store eligibility, joins document.customer_id to requested customer and resolves stored image metadata. Server obtains actor from authenticated session, never from request data. Authenticated/anon cannot call this function. Existing server credential reused, no secret/config changes.
 6. Dedicated customer image endpoint signs only server-resolved path in the fixed private bucket for 60 seconds. Response private/no-store/no-referrer, no arbitrary bucket/path accepted. A previously issued signed capability may remain usable until its 60-second expiry after revocation; no shared cache or permanent/public image URL.
 7. customer_documents replaces its permissive ALL policy with unchanged scoped SELECT plus admin-only INSERT/UPDATE. Existing metadata server action also checks admin. prepare_document_upload and complete_document_upload retain signatures/ACL/logic, with an added active-admin check only for customer_document kind. Import-document upload behavior is unchanged. Staff can enter identity fields when creating a customer but cannot mutate document metadata/upload images.
@@ -44,7 +44,7 @@ Trusted function ownership must be verified after application (expected migratio
 
 ## Validation and limits
 
-Full check command: npm --prefix app run check (type generation/TypeScript, ESLint, full unit and actual-SQL tests, Next production build). Completed successfully: 22 test files / 231 tests, TypeScript, ESLint and Next production build. Six real-PostgreSQL concurrency scenarios and actual-component browser regression (including paging) also passed.
+Full check command: npm --prefix app run check (type generation/TypeScript, ESLint, full unit and actual-SQL tests, Next production build). Completed successfully: 22 test files / 233 tests, TypeScript, ESLint and Next production build. Six real-PostgreSQL concurrency scenarios and actual-component browser regression (including paging) also passed.
 New security tests cover anonymous/inactive/unassigned/freshly disabled sessions; own-store insert/cross-store denial; existing update/upsert and document metadata denial; service upload denial; customer/document mismatch; explicit projections and ACLs; invalid pagination; atomic rollback; repeat request; changed candidates; history/document pagination without overlap. API tests cover trusted actor derivation, no arbitrary path, 60-second signing, no-store, no privileged client before authentication, CSV insert-only/authorization and unknown-outcome handling.
 Real PostgreSQL 17, network-disabled ephemeral container: simultaneous same-request retry, separate requests matching same person, ordinary insert/update versus import, visit refresh versus admin update, unsupported isolation. PGlite tests alone are not presented as real concurrency evidence.
 Actual React page/components exercised using local synthetic adapters at desktop/mobile 1440/390/320px, including pagination tab retention, form fields/cancel, masks, staff read/no edit, CSV candidate exclusion, empty filters, repeated Escape/focus restoration. These are not real authenticated production E2E tests.
@@ -55,4 +55,9 @@ Outstanding release steps: independent code/SQL review; metadata/owner/ACL prefl
 
 Customer writes across stores are serialized during the short transaction: CSV has a 20-row cap; concurrent customer and visit-date writes may wait. Migration DDL briefly locks affected tables. No existing records are deleted, inferred, backfilled or rewritten.
 
-Rollback application first, then restore the prior private.customer_directory definition (original migration, CREATE OR REPLACE only) for compatibility with old strict response parsing. Revoke new public/private customer-detail and CSV entry points; remove the new write guard and restore prior refresh_customer_visits definition together. Keep memo/gender columns and receipts to avoid data loss. Do not automatically restore staff document-edit permissions: that would undo the approved read-only-existing-record policy. Restore legacy upload functions/policies only with explicit authorization. No migration-history repair is part of this work.
+Rollback application first: legacy directory RPC remains unchanged, so the old application still parses it without SQL repair. Revoke the new v2 directory, customer-detail and CSV entry points; remove the new write guard and restore prior refresh_customer_visits definition together. Keep memo/gender columns and receipts to avoid data loss. Do not automatically restore staff document-edit permissions: that would undo the approved read-only-existing-record policy. Restore legacy upload functions/policies only with explicit authorization. No migration-history repair is part of this work.
+
+
+## Mixed-version rollout compatibility
+
+The reviewed original migration would have added keys to the legacy directory JSON and broken the old strict client. The final replacement uses v2 functions instead. Pre-apply DB, verify old and v2 readers/ACLs, then deploy new app. Existing customer listing continues to work throughout; old staff document-edit/upload actions become denied as soon as the approved DB restriction is applied (the old UI may still display those actions until deployment). No data deletion/reset/backfill is required. Do not apply the superseded SQL hash.

@@ -188,7 +188,7 @@ begin
 end;
 $$;
 
-create or replace function private.customer_directory(
+create function private.customer_directory_v2(
   p_name text default '', p_phone text default '', p_card text default '',
   p_store uuid default null, p_from date default null, p_to date default null,
   p_selected uuid default null, p_page integer default 1
@@ -236,6 +236,19 @@ begin
   return result;
 end;
 $$;
+-- No changes to private.customer_directory or public.get_customer_directory.
+revoke all on function private.customer_directory_v2(text,text,text,uuid,date,date,uuid,integer) from public,anon,authenticated;
+grant execute on function private.customer_directory_v2(text,text,text,uuid,date,date,uuid,integer) to authenticated;
+create function public.get_customer_directory_v2(
+  p_name text default '', p_phone text default '', p_card text default '',
+  p_store uuid default null, p_from date default null, p_to date default null,
+  p_selected uuid default null, p_page integer default 1
+) returns jsonb language sql stable security invoker set search_path = '' as $$
+  select private.customer_directory_v2(p_name,p_phone,p_card,p_store,p_from,p_to,p_selected,p_page);
+$$;
+revoke all on function public.get_customer_directory_v2(text,text,text,uuid,date,date,uuid,integer) from public,anon,authenticated;
+grant execute on function public.get_customer_directory_v2(text,text,text,uuid,date,date,uuid,integer) to authenticated;
+
 -- Take the same lock before existing customer row locks to keep lock ordering consistent.
 create or replace function private.refresh_customer_visits()
 returns trigger language plpgsql security definer set search_path = '' as $$

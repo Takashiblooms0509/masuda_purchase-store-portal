@@ -254,6 +254,19 @@ export type Database = {
         };
         Returns: Json;
       };
+      get_customer_directory_v2: {
+        Args: {
+          p_name?: string;
+          p_phone?: string;
+          p_card?: string;
+          p_store?: string | null;
+          p_from?: string | null;
+          p_to?: string | null;
+          p_selected?: string | null;
+          p_page?: number;
+        };
+        Returns: Json;
+      };
       prepare_document_upload: {
         Args: {
           p_actor: string;
