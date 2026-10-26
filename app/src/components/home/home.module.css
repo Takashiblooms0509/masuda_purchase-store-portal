@@ -1,10 +1,10 @@
 .home {
   color: #17191f;
   background: white;
-  padding: 32px;
-  border-radius: 8px;
+  padding: 0;
+  border-radius: 0;
   --primary: #5d54b2;
-  --muted: #727987;
+  --muted: #626875;
   --border: #e5e7ef;
 }
 .home h1 {
@@ -61,7 +61,7 @@
   font-size: 12px;
   width: auto;
   max-width: 100%;
-  border-color: #dfe2e9;
+  border-color: #858d9c;
 }
 .filters a {
   font-size: 12px;
@@ -74,7 +74,7 @@
   align-items: center;
   min-height: 52px;
   font-size: 11px;
-  color: #727987;
+  color: #626875;
 }
 .conditions button {
   background: #f2efff;
@@ -97,7 +97,7 @@
 }
 .metrics h2 {
   font-size: 11px;
-  color: #727987;
+  color: #626875;
 }
 .metrics p {
   font-size: 27px;
@@ -108,7 +108,7 @@
 }
 .note {
   font-size: 11px;
-  color: #727987;
+  color: #626875;
   line-height: 1.9;
   margin: 16px 0;
 }
@@ -139,7 +139,7 @@
 }
 .axis {
   font-size: 10px;
-  color: #727987;
+  color: #626875;
 }
 .chartScroll {
   overflow-x: auto;
@@ -164,6 +164,7 @@
   min-width: 0;
   max-width: 40px;
   padding: 0;
+  min-height: 0;
   display: flex;
   align-items: end;
   border: 0;
@@ -183,7 +184,7 @@
   display: flex;
   justify-content: space-between;
   font-size: 10px;
-  color: #727987;
+  color: #626875;
 }
 .detail {
   background: #f8f9fc;
@@ -196,7 +197,7 @@
   display: flex;
   gap: 20px;
   font-size: 11px;
-  color: #727987;
+  color: #626875;
 }
 .dayCounts strong {
   display: block;
@@ -285,7 +286,7 @@
 .empty {
   padding: 70px 10px;
   text-align: center;
-  color: #727987;
+  color: #626875;
   font-size: 12px;
 }
 .footer {
@@ -294,7 +295,7 @@
   padding-top: 20px;
   font-size: 10px;
   letter-spacing: 1px;
-  color: #727987;
+  color: #626875;
 }
 @media (max-width: 1200px) {
   .metrics {
@@ -307,7 +308,7 @@
 }
 @media (max-width: 620px) {
   .home {
-    padding: 18px;
+    padding: 0;
   }
   .heading {
     flex-wrap: wrap;
