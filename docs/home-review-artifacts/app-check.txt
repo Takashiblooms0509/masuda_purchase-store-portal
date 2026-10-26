@@ -1,0 +1,97 @@
+
+> masuda-purchase-store-portal@0.1.0 check
+> npm run typecheck && npm run lint && npm test && npm run build
+
+
+> masuda-purchase-store-portal@0.1.0 typecheck
+> next typegen && tsc --noEmit
+
+Generating route types...
+✓ Types generated successfully
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+
+> masuda-purchase-store-portal@0.1.0 lint
+> eslint
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+
+> masuda-purchase-store-portal@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.11 /workspace/masuda_purchase-store-portal/app
+
+
+ Test Files  11 passed (11)
+      Tests  126 passed (126)
+   Start at  02:51:13
+   Duration  14.25s (transform 670ms, setup 0ms, import 2.44s, tests 36.50s, environment 2ms)
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+
+> masuda-purchase-store-portal@0.1.0 build
+> next build
+
+▲ Next.js 16.3.8 (Turbopack)
+✓ Running next.config.ts took 30ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 538ms
+  Running TypeScript ...
+  Finished TypeScript in 2.3s ...
+  Collecting page data using 4 workers ...
+  Generating static pages using 4 workers (0/15) ...
+  Generating static pages using 4 workers (3/15)
+  Generating static pages using 4 workers (7/15)
+  Generating static pages using 4 workers (11/15)
+✓ Generating static pages using 4 workers (15/15) in 304ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ƒ /account-pending
+├ ƒ /admin/stores
+├ ƒ /admin/users
+├ ƒ /api/documents/[kind]/[id]/image
+├ ƒ /api/imports/[id]/read
+├ ƒ /categories
+├ ƒ /customers
+├ ƒ /customers/[id]
+├ ƒ /customers/new
+├ ƒ /errors
+├ ƒ /imports
+├ ƒ /imports/[id]
+├ ○ /login
+├ ƒ /purchases
+├ ƒ /purchases/[id]
+└ ƒ /purchases/new
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

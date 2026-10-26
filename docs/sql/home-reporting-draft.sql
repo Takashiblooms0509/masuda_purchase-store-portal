@@ -1,0 +1,3 @@
+-- Superseded by the formal CLI-generated migration:
+-- supabase/migrations/20261026024940_home_item_outcomes_reporting.sql
+-- Review and apply that file only; this pointer contains no executable SQL.

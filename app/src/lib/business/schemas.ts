@@ -25,6 +25,7 @@ export const customerSchema = z.object({
   identification_number: text(100),
 });
 export const itemSchema = z.object({
+  purchase_status: z.enum(["pending", "completed", "not_completed"]).optional(),
   id: uuid,
   product_category_id: uuid,
   item_name: z.string().trim().min(1).max(500),

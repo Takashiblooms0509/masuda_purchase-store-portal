@@ -20,6 +20,7 @@ type CustomerOption = Pick<
   "id" | "name" | "store_id" | "membership_card_number"
 >;
 type DraftItem = {
+  purchase_status: PurchaseItem["purchase_status"];
   id: string | null;
   product_category_id: string;
   item_name: string;
@@ -34,6 +35,7 @@ type DraftItem = {
 function draft(item?: PurchaseItem): DraftItem {
   return {
     id: item?.id ?? null,
+    purchase_status: item?.purchase_status ?? "pending",
     product_category_id: item?.product_category_id ?? "",
     item_name: item?.item_name ?? "",
     denomination_or_weight: item?.denomination_or_weight ?? "",
@@ -122,6 +124,7 @@ export function TransactionForm({
     );
   const payload = lines.map((line) => ({
     id: line.id,
+    purchase_status: line.purchase_status,
     item_name: line.item_name,
     category_reviewed: line.category_reviewed,
     product_category_id: line.product_category_id || null,
@@ -206,7 +209,7 @@ export function TransactionForm({
             </label>
           ))}
           <label>
-            成約 / 不成約
+            取引全体の従来記録（HOME集計には使いません）
             <select
               aria-label="成約 / 不成約"
               name="transaction_status"
@@ -346,6 +349,23 @@ export function TransactionForm({
         {lines.map((line, index) => (
           <fieldset key={line.id ?? `new-${index}`} className="item-editor">
             <legend>明細 {index + 1}</legend>
+            <label>
+              商品の成約状態
+              <select
+                aria-label={`明細 ${index + 1} の成約状態`}
+                value={line.purchase_status}
+                onChange={(e) =>
+                  changeItem(index, "purchase_status", e.target.value)
+                }
+              >
+                <option value="pending">未確定</option>
+                <option value="completed">成約</option>
+                <option value="not_completed">不成約</option>
+              </select>
+            </label>
+            <p className="muted small">
+              HOMEは明細1行を1点として集計します。未確定は成約率の分母に含めません。過去の状態を取引全体の結果から推定せず、商品ごとに確認してください。
+            </p>
             <div className="form-grid">
               <label>
                 商品名<span className="required"> 必須</span>

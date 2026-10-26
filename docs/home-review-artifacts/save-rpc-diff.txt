@@ -1,0 +1,20 @@
+PASS: after removing only new purchase_status UPDATE/INSERT expressions, existing save_purchase_transaction signature/body matches Phase2 byte-for-byte.
+
+--- Phase2 save RPC
++++ HOME save RPC
+@@ -26,12 +26,12 @@
+       if item_id = any(kept_ids) then raise exception 'Duplicate item id' using errcode='23514'; end if;
+       update public.purchase_items set product_category_id=(item->>'product_category_id')::uuid,
+         item_name=item->>'item_name', denomination_or_weight=item->>'denomination_or_weight', quantity=(item->>'quantity')::numeric,
+-        purchase_amount=(item->>'purchase_amount')::numeric, category_reviewed=(item->>'category_reviewed')::boolean, notes=item->>'notes', display_order=line_order
++        purchase_amount=(item->>'purchase_amount')::numeric, purchase_status=coalesce(item->>'purchase_status',purchase_status), category_reviewed=(item->>'category_reviewed')::boolean, notes=item->>'notes', display_order=line_order
+       where id=item_id and purchase_transaction_id=transaction_id returning id into item_id;
+       if not found then raise exception 'Item does not belong to transaction' using errcode='42501'; end if;
+     else
+-      insert into public.purchase_items(purchase_transaction_id,product_category_id,item_name,denomination_or_weight,quantity,purchase_amount,category_reviewed,notes,display_order)
+-      values (transaction_id,(item->>'product_category_id')::uuid,item->>'item_name',item->>'denomination_or_weight',(item->>'quantity')::numeric,(item->>'purchase_amount')::numeric,coalesce((item->>'category_reviewed')::boolean,false),item->>'notes',line_order) returning id into item_id;
++      insert into public.purchase_items(purchase_transaction_id,product_category_id,item_name,denomination_or_weight,quantity,purchase_amount,purchase_status,category_reviewed,notes,display_order)
++      values (transaction_id,(item->>'product_category_id')::uuid,item->>'item_name',item->>'denomination_or_weight',(item->>'quantity')::numeric,(item->>'purchase_amount')::numeric,coalesce(item->>'purchase_status','pending'),coalesce((item->>'category_reviewed')::boolean,false),item->>'notes',line_order) returning id into item_id;
+     end if;
+     kept_ids := array_append(kept_ids,item_id);
+     line_order := line_order + 1;

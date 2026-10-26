@@ -1,0 +1,1 @@
+PASS actual React HOME + local HTTP + PGlite SQL: mixed-item 50%, category drilldown/clear, daily detail/clear, metric switch, store/category intersection, 6 repeated cycles, empty, invalid range preserves displayed scope, keyboard pie, mobile no overflow, no browser errors or external requests.

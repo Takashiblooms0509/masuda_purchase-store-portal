@@ -86,7 +86,11 @@ export type DocumentImport = Timestamps & {
   file_url: string | null;
   drive_file_id: string | null;
   processing_status:
-    "pending" | "processing" | "review_required" | "completed" | "failed";
+    | "pending"
+    | "processing"
+    | "review_required"
+    | "completed"
+    | "failed";
   error_message: string | null;
   retry_count: number;
   processed_at: string | null;
@@ -120,6 +124,7 @@ export type DashboardSummary = {
   month_unpriced: number;
 };
 export type ItemFields = {
+  purchase_status: "pending" | "completed" | "not_completed";
   product_category_id: string | null;
   item_name: string;
   denomination_or_weight: string | null;
@@ -257,6 +262,17 @@ export type Database = {
         Returns: undefined;
       };
 
+      get_home_report: {
+        Args: {
+          p_from: string;
+          p_to: string;
+          p_store?: string | null;
+          p_day?: string | null;
+          p_category?: string | null;
+          p_uncategorized?: boolean;
+        };
+        Returns: Json;
+      };
       get_dashboard_summary: {
         Args: { p_as_of?: string };
         Returns: DashboardSummary[];
