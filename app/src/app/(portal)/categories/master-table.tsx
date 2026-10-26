@@ -3,7 +3,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ProductCategory } from "@/types/database";
 import { saveCategory } from "./actions";
-import { CategoryCsvPanel } from "./csv-panel";
+import { CategoryCsvDialog } from "./csv-dialog";
 import styles from "./master.module.css";
 type Draft = {
   original?: ProductCategory;
@@ -361,12 +361,26 @@ export function CategoryMaster({
           <p className="muted">親と子を一緒に見ながら、その場で編集。</p>
         </div>
         {admin && (
-          <button
-            disabled={!!draft || malformed}
-            onClick={() => start("parent")}
-          >
-            親カテゴリを追加
-          </button>
+          <div className={styles.buttons}>
+            <button
+              disabled={!!draft || malformed}
+              onClick={() => start("parent")}
+            >
+              親カテゴリを追加
+            </button>
+            <a
+              href="/categories/export"
+              className="button secondary"
+              aria-disabled={!!draft}
+              tabIndex={draft ? -1 : undefined}
+              onClick={(e) => {
+                if (draft) e.preventDefault();
+              }}
+            >
+              CSV出力
+            </a>
+            <CategoryCsvDialog disabled={!!draft || malformed} />
+          </div>
         )}
       </div>
       {malformed && (
@@ -481,12 +495,6 @@ export function CategoryMaster({
       <p className={styles.status}>
         狭い画面では表を左右にスクロールできます。使用済みカテゴリは削除せず無効化し、履歴を保持します。
       </p>
-      {admin && (
-        <details className={styles.csv} inert={!!draft || malformed}>
-          <summary>補助機能：CSV出力・取込</summary>
-          <CategoryCsvPanel />
-        </details>
-      )}
       <dialog
         ref={dialog}
         className={styles.dialog}
