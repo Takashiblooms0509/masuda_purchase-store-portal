@@ -92,6 +92,13 @@ describe("Phase2 business tables / actual PostgreSQL RLS", () => {
           "utf8",
         ),
       );
+    // Re-run the existing atomic-save/RLS cases against the proposed HOME RPC update.
+    await db.exec(
+      readFileSync(
+        new URL("../../docs/sql/home-reporting-draft.sql", import.meta.url),
+        "utf8",
+      ),
+    );
     await db.query(
       "insert into public.stores(id,code,name)values($1,'A','店舗A'),($2,'B','店舗B')",
       [storeA, storeB],
