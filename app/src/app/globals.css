@@ -214,7 +214,7 @@ details .stack { margin-top: 20px; }
 .customer-secret button { min-height:32px; padding:4px 8px; font-size:11px; }
 .customer-memo { white-space:pre-wrap; overflow-wrap:anywhere; }
 .customer-transaction { padding:12px 0; border-bottom:1px solid var(--border); }
-.customer-dialog { padding:0; border:1px solid var(--border); border-radius:8px; width:min(720px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); color:var(--ink); }
+.customer-dialog { position:fixed; inset:0; margin:auto; padding:0; border:1px solid var(--border); border-radius:8px; width:min(720px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); color:var(--ink); }
 .customer-dialog[open] { display:flex; flex-direction:column; }
 .customer-dialog::backdrop { background:#10121d55; }
 .customer-dialog > header { padding:16px 24px; border-bottom:1px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:space-between; }
