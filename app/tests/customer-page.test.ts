@@ -47,7 +47,34 @@ const report = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
-  rpc.mockResolvedValue({ data: report, error: null });
+  rpc.mockImplementation(async (name: string) => ({
+    data:
+      name === "get_customer_detail"
+        ? {
+            customer: {
+              ...customer,
+              birth_date: "1990-01-01",
+              gender: "female",
+              occupation: null,
+              postal_code: null,
+              address: "PRIVATE-APPROVED",
+              dm_allowed: null,
+              identification_type: null,
+              identification_number: "FAKE-ID",
+              memo: null,
+              first_visit_date: null,
+              last_visit_date: null,
+              updated_at: customer.created_at,
+            },
+            store_name: "検証B店",
+            documents: [],
+            document_count: 0,
+            transactions: [],
+            transaction_count: 0,
+          }
+        : report,
+    error: null,
+  }));
   session.mockResolvedValue({
     profile: { id: "staff", role: "staff" },
     stores: [{ id: store, name: "検証A店", is_active: true }],
@@ -94,7 +121,7 @@ describe("Customer directory boundary", () => {
         selected: customer.id,
       }),
     });
-    expect(rpc).toHaveBeenCalledWith("get_customer_directory", {
+    expect(rpc).toHaveBeenCalledWith("get_customer_directory_v2", {
       p_name: "A%",
       p_phone: "001",
       p_card: "012",
@@ -130,7 +157,7 @@ describe("Customer directory boundary", () => {
         }),
       ),
     ).toContain('data-editable="true"');
-    expect(from).toHaveBeenCalledTimes(1);
+    expect(from).not.toHaveBeenCalled();
     session.mockResolvedValue(s);
     expect(
       renderToStaticMarkup(
@@ -139,7 +166,7 @@ describe("Customer directory boundary", () => {
         }),
       ),
     ).toContain('data-editable="false"');
-    expect(from).toHaveBeenCalledTimes(1);
+    expect(from).not.toHaveBeenCalled();
   });
   it("rejects unexpected sensitive columns instead of sending them into client props", async () => {
     rpc.mockResolvedValue({

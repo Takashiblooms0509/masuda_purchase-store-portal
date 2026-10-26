@@ -102,7 +102,9 @@ export async function saveCustomerDocument(
   _state: ActionState,
   form: FormData,
 ): Promise<ActionState> {
-  const { supabase } = await businessSession();
+  const { supabase, profile } = await businessSession();
+  if (profile.role !== "admin")
+    return { message: "本人確認書類の変更は管理者のみ行えます。" };
   const parsed = documentSchema.safeParse(
     Object.fromEntries(
       ["id", "customer_id", "document_type", "file_name"].map((key) => [
