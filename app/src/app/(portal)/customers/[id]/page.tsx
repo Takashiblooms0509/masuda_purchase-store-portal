@@ -14,7 +14,7 @@ export default async function CustomerPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const id = validId((await params).id);
-  const { supabase, stores } = await businessSession();
+  const { supabase, stores, profile } = await businessSession();
   const page = Math.max(
     1,
     Math.min(10000, Math.trunc(Number((await searchParams).page) || 1)),
@@ -48,7 +48,37 @@ export default async function CustomerPage({
       />
       <section className="card">
         <h2>顧客基本情報</h2>
-        <CustomerForm customer={customer} stores={stores} />
+        {profile.role === "admin" ? (
+          <CustomerForm customer={customer} stores={stores} />
+        ) : (
+          <dl className="customer-facts">
+            {[
+              ["氏名", customer.name],
+              ["フリガナ", customer.name_kana],
+              ["生年月日", customer.birth_date],
+              ["職業", customer.occupation],
+              ["郵便番号", customer.postal_code],
+              ["住所", customer.address],
+              ["電話番号", customer.phone],
+              ["リピーターズカード番号", customer.membership_card_number],
+              [
+                "DM可否",
+                customer.dm_allowed === null
+                  ? "未確認"
+                  : customer.dm_allowed
+                    ? "可"
+                    : "不可",
+              ],
+              ["本人確認書類の種類", customer.identification_type],
+              ["本人確認書類番号", customer.identification_number],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value || "—"}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </section>
       <section className="card">
         <h2>本人確認書類</h2>

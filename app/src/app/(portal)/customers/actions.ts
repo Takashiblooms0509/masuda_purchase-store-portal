@@ -33,6 +33,8 @@ export async function saveCustomer(
       message: "店舗・氏名・生年月日などの入力内容を確認してください。",
     };
   const { id, store_id, ...values } = parsed.data;
+  if (id && session.profile.role !== "admin")
+    return { message: "顧客情報の編集は管理者のみ行えます。" };
   if (!storeAllowed(session, store_id))
     return { message: "所属店舗の顧客のみ登録・編集できます。" };
   let customerId = id;
