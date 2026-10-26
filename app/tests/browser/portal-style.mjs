@@ -21,7 +21,7 @@ export const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
 const stamp='2026-10-26T01:00:00Z';
 const stores=[{id:id(10),code:'SAMPLE-A',name:'検証 A 店',is_active:true},{id:id(11),code:'SAMPLE-B',name:'検証 B 店',is_active:false}];
 const customers=[1,2,3].map(n=>({id:id(n),store_id:id(n===3?11:10),name:'架空顧客 '+n,name_kana:'テスト',membership_card_number:'DEMO-00'+n,phone:'未登録',address:'検証用住所（架空）',first_visit_date:'2026-10-01',last_visit_date:'2026-10-26',created_at:stamp,updated_at:stamp}));
-const categories=[{id:id(20),category_name:'金属',parent_category_id:null,category_level:1,display_order:1,is_active:true},{id:id(21),category_name:'カード',parent_category_id:null,category_level:1,display_order:2,is_active:true},{id:id(22),category_name:'検証・無効カテゴリ',parent_category_id:id(20),category_level:2,display_order:3,is_active:false}];
+export const categories=[{id:id(20),category_name:'金属',parent_category_id:null,category_level:1,display_order:1,is_active:true,updated_at:stamp},{id:id(21),category_name:'カード',parent_category_id:null,category_level:1,display_order:2,is_active:true,updated_at:stamp},{id:id(22),category_name:'検証・無効カテゴリ',parent_category_id:id(20),category_level:2,display_order:3,is_active:false,updated_at:stamp}];
 const transactions=[1,2,3].map(n=>({id:id(30+n),store_id:id(10),customer_id:id(n),document_number:'DEMO-00'+n,visit_datetime:stamp,transaction_status:n===2?'not_completed':'completed',purchase_item_count:2,purchase_total:12000,source_document_id:null,updated_at:stamp}));
 const profile={id:id(90),name:'検証管理者',email:'review@example.test',role:'admin',is_active:true,store_id:id(10)};
 const imports=[{id:id(40),store_id:id(10),file_name:'架空の買取計算書.png',document_type:'purchase_document',processing_status:'failed',created_at:stamp,updated_at:stamp,file_url:null,error_message:'検証用：画像を確認してください。',retry_count:1}];
@@ -33,6 +33,7 @@ async function rpc(name,args){
  let filtered=window.__empty?[]:projected.filter(c=>(!args.p_store||c.store_id===args.p_store)&&(!args.p_name||(c.name+' '+c.name_kana).includes(args.p_name))&&(!args.p_phone||c.phone.includes(args.p_phone))&&(!args.p_card||c.membership_card_number.includes(args.p_card)));
  return {data:{customers:filtered,total:filtered.length,selected:projected.find(c=>c.id===args.p_selected)||null,stores:stores.map(s=>({id:s.id,name:s.name}))},error:null};
 }
+window.__categoryFixture=categories;
 export const requireProfile=async()=>({profile:{...profile,id:window.__staff?id(91):id(90),role:window.__staff?'staff':'admin'},store:stores[0],stores:window.__staff?stores.slice(0,1):stores,supabase:{from,rpc}});
 export const requireAdmin=requireProfile;
 export const businessSession=requireProfile;
@@ -125,6 +126,14 @@ try {
           )
             return `export * from '${temp}/config.ts';`;
           if (id.endsWith("actions.ts") && id.startsWith(app + "/src/")) {
+            if (id.endsWith("/categories/actions.ts"))
+              return `
+            import {parseCategoryCsv,previewCategories} from '${app}/src/lib/categories/csv.ts';
+            import {categories} from '${temp}/fixture.ts';
+            export async function saveCategory(previous,form){window.__categoryCalls=(window.__categoryCalls||0)+1;window.__categoryPayload=Object.fromEntries(form);await new Promise(r=>setTimeout(r,80));return window.__categoryFailure?{message:'検証用：保存失敗'}:{message:'検証用：保存成功',success:true,updatedAt:new Date().toISOString()}}
+            export async function previewCategoryImport(previous,form){try{const rows=parseCategoryCsv(await form.get('file').text());const preview=previewCategories(rows,categories);return {message:'ローカルプレビュー',success:!preview.errors.length,preview}}catch(e){return{message:e.message}}}
+            export async function confirmCategoryImport(){window.__csvSaves=(window.__csvSaves||0)+1;return{message:'検証用：全行保存成功',success:true}}
+          `;
             const source = await readFile(id, "utf8");
             return [...source.matchAll(/export async function (\w+)/g)]
               .map(
@@ -181,13 +190,180 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await show("categories");
-  await page.locator("summary").first().focus();
-  await page.keyboard.press("Enter");
-  assert.equal(await page.locator("details[open]").count(), 1);
+  const categoryRow = page.getByRole("row", { name: "金属", exact: true });
+  const categoryName = categoryRow.getByRole("textbox");
+  await categoryName.focus();
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await categoryRow
+      .getByRole("combobox")
+      .evaluate((el) => el === document.activeElement),
+    true,
+  );
+  for (let n = 0; n < 3; n++) {
+    await categoryName.fill("検証変更" + n);
+    assert.equal(await page.evaluate(() => window.__categoryCalls || 0), n);
+    await categoryRow.getByRole("button", { name: "変更を戻す" }).click();
+    assert.equal(await categoryName.inputValue(), "金属");
+    await categoryName.fill("金属 ");
+    await categoryRow.getByRole("checkbox").uncheck();
+    await categoryRow
+      .getByRole("button", { name: "保存", exact: true })
+      .click();
+    await categoryRow.getByRole("status").waitFor();
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll(".category-table button:enabled").length ===
+        0,
+    );
+    assert.equal(
+      await page.evaluate(() => window.__categoryPayload.is_active),
+      undefined,
+    );
+    assert.equal(
+      await page.evaluate(() => window.__categoryPayload.updated_at != null),
+      true,
+    );
+    await categoryRow.getByRole("checkbox").check();
+    await categoryRow.getByRole("button", { name: "変更を戻す" }).click();
+    assert.equal(await categoryRow.getByRole("checkbox").isChecked(), false);
+    // Save a further change for the next iteration without resetting the component.
+    if (n < 2) await categoryName.fill("金属");
+  }
+  await page.evaluate(() => (window.__categoryFailure = true));
+  await categoryName.fill("保持する未保存値");
+  await categoryRow.getByRole("button", { name: "保存", exact: true }).click();
+  await categoryRow.getByText("検証用：保存失敗").waitFor();
+  assert.equal(await categoryName.inputValue(), "保持する未保存値");
+  await categoryRow.getByRole("button", { name: "変更を戻す" }).click();
+  await page.evaluate(() => (window.__categoryFailure = false));
+  const newCategory = page.getByRole("row", {
+    name: "新規カテゴリ",
+    exact: true,
+  });
+  await newCategory.getByRole("textbox").fill("検証用新規");
+  await newCategory.getByRole("button", { name: "追加", exact: true }).click();
+  await newCategory.getByText("検証用：保存成功").waitFor();
+  assert.equal(await newCategory.getByRole("textbox").inputValue(), "");
+  assert.equal(await newCategory.getByRole("checkbox").isChecked(), true);
+  assert.equal(await page.evaluate(() => window.__categoryPayload.id), "");
+  await show("categories", false, true);
+  assert.equal(
+    await page
+      .locator(
+        ".category-table input,.category-table select,.category-table button",
+      )
+      .count(),
+    0,
+  );
+  await show("categories");
   await page.screenshot({
     path: path.join(output, "category-edit-keyboard.png"),
     fullPage: true,
   });
+  // Server revalidation updates clean rows while retaining unrelated dirty drafts.
+  await page.evaluate(() => {
+    window.__categoryFixture[0].category_name = "サーバー更新";
+    window.__categoryFixture[0].updated_at = "2026-10-26T06:00:00Z";
+  });
+  await show("categories");
+  const refreshed = page.getByRole("row", {
+    name: "サーバー更新",
+    exact: true,
+  });
+  assert.equal(
+    await refreshed.getByRole("textbox").inputValue(),
+    "サーバー更新",
+  );
+  await refreshed.getByRole("textbox").fill("未保存の編集");
+  await page.evaluate(() => {
+    window.__categoryFixture[0].category_name = "別の保存";
+    window.__categoryFixture[0].updated_at = "2026-10-26T07:00:00Z";
+  });
+  await show("categories");
+  const dirtyRefreshed = page.getByRole("row", {
+    name: "別の保存",
+    exact: true,
+  });
+  assert.equal(
+    await dirtyRefreshed.getByRole("textbox").inputValue(),
+    "未保存の編集",
+  );
+  assert.equal(
+    await dirtyRefreshed.locator("input[name=updated_at]").inputValue(),
+    "2026-10-26T06:00:00Z",
+  );
+  const csvHeader =
+    "id,new_key,parent_id,parent_new_key,category_name,display_order,is_active,updated_at\n";
+  const csvFile = (content) => ({
+    name: "categories.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csvHeader + content),
+  });
+  await page
+    .locator("input[type=file]")
+    .setInputFiles(
+      csvFile(
+        ",csvparent,,,CSV親,0,true,\n,csvchild,,csvparent,CSV子,1,true,\n",
+      ),
+    );
+  await page
+    .getByRole("button", { name: "取込内容をプレビュー", exact: true })
+    .click();
+  await page
+    .getByRole("heading", { name: "取込前確認：追加 2行 / 更新 0行" })
+    .waitFor();
+  assert.equal(await page.evaluate(() => window.__csvSaves || 0), 0);
+  assert.equal(
+    await page.getByRole("button", { name: "確認した全行を保存" }).isDisabled(),
+    true,
+  );
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    await page.screenshot({
+      path: path.join(output, "category-csv-preview-" + width + ".png"),
+      fullPage: true,
+    });
+  }
+  await page
+    .getByRole("checkbox", {
+      name: "変更内容を確認しました。全行を一括保存します。",
+    })
+    .check();
+  await page.getByRole("button", { name: "確認した全行を保存" }).click();
+  await page.getByText("検証用：全行保存成功").waitFor();
+  assert.equal(await page.evaluate(() => window.__csvSaves), 1);
+  assert.equal(
+    await page.getByRole("button", { name: "確認した全行を保存" }).count(),
+    0,
+  );
+  await page
+    .locator("input[type=file]")
+    .setInputFiles(csvFile(",p,,,同名,0,true,\n,q,,,同名,1,false,\n"));
+  await page
+    .getByRole("button", { name: "取込内容をプレビュー", exact: true })
+    .click();
+  await page
+    .getByRole("alert")
+    .filter({ hasText: "エラーがあるため保存できません" })
+    .waitFor();
+  assert.equal(
+    await page.getByRole("button", { name: "確認した全行を保存" }).count(),
+    0,
+  );
+  await show("categories", false, true);
+  assert.equal(await page.locator("input[type=file]").count(), 0);
+  assert.equal(
+    await page.getByRole("link", { name: "保存済みカテゴリをCSV出力" }).count(),
+    0,
+  );
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await show("purchase");
   for (let n = 0; n < 3; n++) {
     await page.getByRole("button", { name: "明細行を追加" }).click();
@@ -381,7 +557,7 @@ try {
   assert.deepEqual(errors, []);
   assert.deepEqual(external, []);
   const result =
-    "PASS: cross-store projection, direct URL, browser back via Router adapter, rapid selection, user role switch, missing/error no stale panel; customer panel select/edit/close 3 cycles, staff no edit, Escape, 1440/390px; import review form at both widths; 14 actual page components and shared layout at 1440/390px, no page overflow; keyboard details/focus; 3 add/remove item cycles and state selector; 5 empty views; staff layout. Synthetic read adapters, no authenticated E2E or persistence. No browser errors/external requests.";
+    "PASS: cross-store projection, direct URL, browser back via Router adapter, rapid selection, user role switch, missing/error no stale panel; customer panel select/edit/close 3 cycles, staff no edit, Escape, 1440/390px; import review form at both widths; 14 actual page components and shared layout at 1440/390px, no page overflow; CSV preview/confirmation/errors/role-boundary/mobile, category explicit save/undo/deactivate 3 cycles, error preserves input, new-row reset, staff read-only; keyboard focus; 3 add/remove item cycles and state selector; 5 empty views; staff layout. Synthetic read adapters, no authenticated E2E or persistence. No browser errors/external requests.";
   console.log(result);
   await writeFile(path.join(output, "browser-check.txt"), result + "\n");
 } finally {

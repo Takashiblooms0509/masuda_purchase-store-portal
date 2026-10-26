@@ -172,3 +172,17 @@ details .stack { margin-top: 20px; }
 .customer-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 @media (max-width: 1100px) { .customer-search { grid-template-columns: repeat(2, minmax(0, 1fr)); } .customer-workspace.has-selection { grid-template-columns: minmax(0, 1fr); } .customer-detail { position: static; } }
 @media (max-width: 620px) { .customer-search { grid-template-columns: 1fr; } }
+
+.category-table { width: max(100%, 980px); table-layout: fixed; }
+.category-table th:nth-child(1) { width: 25%; }
+.category-table th:nth-child(2) { width: 25%; }
+.category-table th:nth-child(3) { width: 11%; }
+.category-table th:nth-child(4) { width: 15%; }
+.category-table th:nth-child(5) { width: 24%; }
+.category-table td { vertical-align: top; }
+.category-table small { display: block; margin-top: 8px; color: var(--muted); font-weight: 400; }
+.category-table select, .category-table input:not([type="checkbox"]) { width: 100%; min-width: 0; }
+.category-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.category-buttons button { padding: 10px 14px; }
+.category-dirty { box-shadow: inset 3px 0 #7660d2; }
+.category-table .notice { white-space: normal; }

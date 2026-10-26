@@ -275,6 +275,7 @@ export type Database = {
         Returns: undefined;
       };
 
+      save_category_batch: { Args: { p_rows: Json }; Returns: Json };
       get_home_report: {
         Args: {
           p_from: string;
