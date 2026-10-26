@@ -12,7 +12,7 @@ const { chromium } = require("playwright");
 const app = path.resolve(import.meta.dirname, "../.."),
   repo = path.dirname(app);
 const temp = await mkdtemp(path.join(tmpdir(), "green-home-browser-"));
-const output = path.join(repo, "docs/home-review-artifacts");
+const output = process.env.HOME_TEST_OUTPUT || path.join(repo, "docs/home-review-artifacts");
 await mkdir(output, { recursive: true });
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const db = new PGlite();
